@@ -81,15 +81,18 @@
 	<script src="./CTDElements.js"></script>
 
 	<script>
-		setTimeout(async () => {
-			const r = await fetch('./P.json');
-			const json = await r.json();
-			console.log(json);
+		function debugRequest() {
+			setTimeout(async () => {
+				const r = await fetch('./P.json');
+				const json = await r.json();
+				console.log(json);
 
-			// drawSamples2(json);
-			// drawSamplesCanvas(json);
-			// drawSamplesCanvasLegend();
-		}, 1);
+				// drawSamples2(json);
+				// drawSamplesCanvas(json);
+				// drawSamplesCanvasLegend();
+			}, 1);
+		}
+		// debugRequest();
 
 		// TODO Clean this code
 		const colorblue = [
@@ -237,7 +240,8 @@
 			}
 
 			// -- all parsed
-			groups.sort((a, b) => a.summary.date[0].getTime() - b.summary.date[0].getTime());
+			groups.sort((a, b) => a.summary.hdr.utc.getTime() - b.summary.hdr.utc.getTime());
+			// groups.sort((a, b) => a.summary.date[0].getTime() - b.summary.date[0].getTime());
 			console.log(groups);
 			summaryCTDReport(groups);
 
@@ -267,17 +271,17 @@
 		}
 
 		function summaryCTDReport(groups) {
-			if (groups.at(-1).summary.date[1]) {
+			if (groups.at(-1).summary.dateHex[1]) {
 
 				// -- cruise time
-				const msCruise = groups.at(-1).summary.date[1].getTime() - groups[0].summary.date[0].getTime();
+				const msCruise = groups.at(-1).summary.dateHex[1].getTime() - groups[0].summary.dateHex[0].getTime();
 				document.getElementById('txtCruiseTime').textContent = msToReadable(msCruise);
 
 				// -- casting count
 				document.getElementById('txtCTDCasting').textContent = groups.length;
 
 				// -- casting time
-				const msCasting = groups.map(group => group.summary.date[1].getTime() - group.summary.date[0].getTime()).reduce((a, b) => a + b, 0);
+				const msCasting = groups.map(group => group.summary.dateHex[1].getTime() - group.summary.dateHex[0].getTime()).reduce((a, b) => a + b, 0);
 				document.getElementById('txtCTDCastingMin').textContent = msToReadable(msCasting);
 
 				document.getElementById('txtNavigationMin').textContent = msToReadable(msCruise - msCasting);
@@ -333,8 +337,9 @@
 
 		function drawPositionsSVG(groups) {
 			const positions = groups.map(group => {
-				const header = group.getHdr().getParsedHDR();
-				return [header.lat, header.lng];
+				// -- can use getHdr instead of getHex but just in case where no HDR
+				const hdr = group.summary.hdr;
+				return [hdr.lat, hdr.lng];
 			});
 
 			const w = 500, h = 500;
@@ -401,6 +406,9 @@
 		}
 
 		function parseCTDReport(group) {
+			group.summary = {};
+
+			parseCTDReportGroup(group);
 			parseCTDReportHex(group);
 			parseCTDReportXMLCON(group);
 			parseCTDReportBL(group);
@@ -419,6 +427,12 @@
 				}
 
 				lastMeanSign = sign;
+			}
+
+			// -- when theres no downcast
+			if (0 === diffPoint.length) {
+				// -- just start to end
+				return [depthDiff[0].idx, depthDiff.at(-1).idx];
 			}
 
 			// -- points to group start Index ~ end Index
@@ -458,6 +472,21 @@
 
 			// use minDiffGroup.s ~ maxDiffGroup.e
 			return [minDiffGroup.s, maxDiffGroup.e];
+		}
+
+		function parseCTDReportGroup(group) {
+			// file name to summary
+
+			let fileName = undefined, fileExt = [];
+			const files = Object.values(group.files).filter(d => d).map(d => {
+				return {
+					name: d.name,
+					lastModified: d.lastModified,
+					size: d.size
+				};
+			});
+
+			group.summary.files = files;
 		}
 
 		function parseCTDReportHex(group) {
@@ -524,17 +553,35 @@
 			// -- 1800 samples for 37MB hex
 			const samples = result.filter(item => item[0] >= downcast[0] && item[0] < downcast[1]);
 
-			group.summary = obj;
+			for (const [k, v] of Object.entries(obj)) {
+				group.summary[k] = v;
+			}
 
 			// -- date
-			const nmeaDuration = [hex.parseValue(100).date, hex.parseValue(len - 100).date];
-			group.summary.date = nmeaDuration;
+			let nmeaDuration = [hex.parseValue(100).date, hex.parseValue(len - 100).date];
+			if (undefined === nmeaDuration[0] || undefined === nmeaDuration[1]) {
+				console.log('No nmea Date, date from hdr and divide by 24hz as 1sec');
+				nmeaDuration[0] = hex.getParsedHDR().utc;
+				// 24 lines of hex as 1 sec
+				const ms = nmeaDuration[0].getTime() + ((hex.getLength() / 24) * 1000);
+				nmeaDuration[1] = new Date(Math.round(ms));
+			}
+			group.summary.dateHex = nmeaDuration;
+			group.summary.lengthHex = hex.getLength();
+
+
 
 			// -- saves samples
 			group.summary.samples = samples;
 
 			// -- saves name again
 			group.summary.name = group.name;
+
+			// -- hdr from hex
+			group.summary.hdr = hex.getParsedHDR();
+
+			// -- parsingDesc
+			group.summary.descHex = hex.parsingDesc;
 		}
 
 		function prettyPrintSensor(item) {
@@ -558,12 +605,9 @@
 
 		function parseCTDReportBL(group) {
 			const bl = group.getBl();
-
-			if (!group.summary) {
-				group.summary = {};
-			}
-
+			if (bl) {
 			group.summary.bl = bl.getParsedBL();
+			}
 		}
 
 		// obj should initialized

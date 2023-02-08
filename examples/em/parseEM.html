@@ -24,7 +24,7 @@
 		}
 
 		header>div {
-			height: 120px;
+			height: 140px;
 			flex: 1;
 		}
 	</style>
@@ -43,6 +43,7 @@
 						value="http://127.0.0.1:8080/raw/raw.all">
 					<button onclick="onClickSubmitURL();return false;">Submit</button>
 				</form>
+				<input type="file" style="width: 95%;" onchange="onChangeFile(this)">
 				<textarea is="text-log" id="textLog" style="width: 80%; height: 80px"></textarea>
 			</div>
 		</header>
@@ -141,6 +142,18 @@
 			ManagerEM.queueWork(ab);
 		}
 
+		async function onChangeFile(e) {
+			const file = e.files[0];
+
+			const d1 = new Date();
+			TextLog.Append(`trying to read local file ${file.name}, ${file.size} bytes`);
+			const ab = await file.arrayBuffer();
+			const d2 = new Date();
+			TextLog.Append(`read done ${(d2.getTime() - d1.getTime())}ms`);
+
+			ManagerEM.queueWork(ab);
+		}
+
 		ManagerEM.setOnMessage((e) => {
 			const msg = e.data;
 			if ('log' === msg.type) {
@@ -159,7 +172,7 @@
 		});
 
 		// -- debug
-		setTimeout(onClickSubmitURL, 1);
+		// setTimeout(onClickSubmitURL, 1);
 	</script>
 
 </body>
