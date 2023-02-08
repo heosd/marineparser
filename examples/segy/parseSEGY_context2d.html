@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Parse SEGY</title>
+	<style>
+		section {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.main {
+			display: flex;
+			flex-direction: row;
+			flex: 4;
+		}
+
+		header {
+			flex: 1;
+			display: flex;
+		}
+
+		header>div {
+			height: 120px;
+			flex: 1;
+		}
+
+		.value-present {
+			display: inline-block;
+			width: 50px;
+			margin-left: 10px;
+		}
+	</style>
+</head>
+
+<body>
+	<section>
+		<header>
+			<!-- left -->
+			<div>
+				<p>Endian : <span id="txtEndian">Unknown</span> endian, Sample Code : <span id="txtSampleCode">Not
+						found</span></p>
+				<p>X : <span id="txtXCount"></span>, Y : <span id="txtYCount"></span></p>
+			</div>
+			<!-- right -->
+			<div>
+				<form>
+					<!-- 37MB -->
+					<input id="inputURL" type="text" style="width: 80%;" placeholder="url"
+						value="http://127.0.0.1:8080/raw/SLF1805041114.sgy">
+					<!-- value="http://127.0.0.1:8080/raw/PHF1805041714.sgy"> -->
+					<button onclick="onClickSubmitURL();return false;">Submit</button>
+				</form>
+				<textarea is="text-log" id="textLog" style="width: 80%; height: 80px"></textarea>
+			</div>
+		</header>
+
+		<div class="main">
+			<canvas id="canvas" width="800" height="500"></canvas>
+			<div id="areaRanges">
+			</div>
+		</div>
+	</section>
+
+	<script src="../../common/TextLog.js"></script>
+	<script src="../../common/Basics.js"></script>
+	<script src="../../common/LoadFile.js"></script>
+	<script src="../../common/Canvas2DPixel.js"></script>
+
+	<script src="../../js/ParserA.js"></script>
+	<script src="../../js/ParserSEGY.js"></script>
+
+	<script>
+		async function onClickSubmitURL() {
+			const e = document.getElementById('inputURL');
+			const url = e.value;
+			if (!url.match(/^http/i)) {
+				alert('invalid url, only accept starting with http');
+				return;
+			}
+
+			TextLog.Time('trying to fetch');
+			const ab = await fetchFileFromURL(url, TextLog.Append);
+			TextLog.Time('fetch done');
+			// TextLog.Append(`fetch done ${(d2.getTime() - d1.getTime())}ms`);
+
+			const context = parseSEGY(ab);
+
+			const maxX = context.traces.length;
+			const maxY = context.traces[0].length
+
+			document.getElementById('txtXCount').textContent = maxX;
+			document.getElementById('txtYCount').textContent = maxY;
+
+			// TextLog.Append(`parse sections done ${(d3.getTime() - d2.getTime())}ms`);
+
+			const parent = document.getElementById('areaRanges');
+			parent.innerHTML = '';
+			createRanges(parent);
+			setRanges('startX', 0, maxX, 0);
+			setRanges('sizeX', 200, maxX, maxX);
+			setRanges('startY', 0, maxY, 0);
+			setRanges('sizeY', 200, maxY, maxY);
+
+			onChangeRange();
+		}
+
+		function parseSEGY(ab) {
+			const segy = ParserSEGY.ParserTest.LoadArrayBuffer(ab);
+			const context = new ParserSEGY.ParserContext();
+			context.load(ab);
+
+			window.dataSourceContext = context;
+
+			document.getElementById('txtEndian').textContent = true === context.isLE ? 'Little' : 'Big';
+			document.getElementById('txtSampleCode').textContent = context.sampleCodeFound?.[1];
+
+			const traces = context.parseTraces();
+			TextLog.Time('parse Traces done');
+			console.log(context);
+
+			return context;
+		}
+
+		function createRanges(parent) {
+			const ids = ['startX', 'sizeX', 'startY', 'sizeY', 'startV', 'sizeV'];
+			const list = ids.map((id, i) => {
+				const span = document.createElement('span');
+				span.classList.add('value-present');
+				const e = document.createElement('input');
+				e.type = 'range';
+				e.id = id;
+				e.addEventListener('change', onChangeRange);
+				e.addEventListener('input', () => {
+					span.textContent = e.value;
+				});
+
+				const label = document.createElement('label');
+				label.htmlFor = id;
+				label.textContent = id;
+
+				parent.appendChild(e);
+				parent.appendChild(label);
+				parent.appendChild(span);
+
+				if (1 === i % 2) {
+					parent.appendChild(document.createElement('br'));
+				}
+
+				return e;
+			});
+
+			// -- setting defaults
+			setRanges('startV', 0, 1000, 0);
+			setRanges('sizeV', 0, 800, 1);
+		}
+
+		function setRanges(id, min, max, value) {
+			const e = document.getElementById(id);
+
+			if (!e) {
+				console.error(`Invalid id ${id}`);
+				return;
+			}
+
+			if (0 < min) {
+				e.min = min;
+			}
+
+			if (0 < max) {
+				e.max = max;
+			}
+
+			if (!isNaN(value)) {
+				e.value = value;
+			}
+
+			e.dispatchEvent(new CustomEvent('input'));
+		}
+
+		function onChangeRange() {
+			const startX = parseInt(document.getElementById('startX').value);
+			const sizeX = parseInt(document.getElementById('sizeX').value);
+			const startY = parseInt(document.getElementById('startY').value);
+			const sizeY = parseInt(document.getElementById('sizeY').value);
+			const startV = parseInt(document.getElementById('startV').value);
+			const sizeV = parseInt(document.getElementById('sizeV').value);
+
+			const context = window.dataSourceContext;
+			if (context && context.traces) {
+				TextLog.TimeNew();
+				drawTraces(context.traces, [startV, startV + sizeV], [startX, startX + sizeX], [startY, startY + sizeY]);
+				TextLog.Time('drawing 2d done');
+			}
+		}
+
+		function drawTraces(traces, domainValue, domainX, domainY, fit) {
+			const canvas = new Canvas2DPixel('canvas');
+			const s = {
+				domainValue: [0, 800],
+				domainX: [0, traces.length],
+				domainY: [0, traces[0].length],
+				rangeValue: [255, 0],
+				rangeX: [0, canvas.w],
+				rangeY: [0, canvas.h],
+			}
+
+			if (false === fit) {
+				// TODO implement false fit
+			} else {
+				// -- default, undefined 'fit' is TRUE!
+				if (domainValue && 2 === domainValue.length) {
+					!isNaN(domainValue[0]) && (s.domainValue[0] = domainValue[0]);
+					!isNaN(domainValue[1]) && (s.domainValue[1] = domainValue[1]);
+				}
+
+				if (domainX && 2 === domainX.length) {
+					!isNaN(domainX[0]) && (s.domainX[0] = domainX[0]);
+					!isNaN(domainX[1]) && (s.domainX[1] = domainX[1]);
+				}
+
+				if (domainY && 2 === domainY.length) {
+					!isNaN(domainY[0]) && (s.domainY[0] = domainY[0]);
+					!isNaN(domainY[1]) && (s.domainY[1] = domainY[1]);
+				}
+			}
+
+			const scaleX = scaleLinear(s.domainX, s.rangeX);
+			const scaleY = scaleLinear(s.domainY, s.rangeY);
+			const colorGray = scaleLinearLimit(s.domainValue, s.rangeValue);
+
+			canvas.newImage();
+			canvas.fill(0xFFAAAAAA);
+			traces.forEach((trace, ix) => {
+				const posX = ~~scaleX(ix);
+				trace.forEach((v, iy) => {
+					const posY = ~~scaleY(iy);
+					const gray = Math.floor(colorGray(v));
+					const color = 0xFF000000 | gray | gray << 8 | gray << 16;
+					// const color = gray << 24;
+
+					canvas.draw32triple(posX, posY, color);
+				});
+			});
+
+			canvas.putImage();
+		}
+
+		function main() {
+			setTimeout(onClickSubmitURL, 1);
+		}
+
+		setTimeout(main, 1);
+
+	</script>
+</body>
+
+</html>

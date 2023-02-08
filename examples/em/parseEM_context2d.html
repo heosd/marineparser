@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Parse Kongsberg Multibeam 'ALL' context data</title>
+	<style>
+		section {
+			display: flex;
+			flex-direction: column;
+		}
+
+		header {
+			flex: 1;
+			display: flex;
+		}
+
+		header>div {
+			height: 120px;
+			flex: 1;
+		}
+	</style>
+</head>
+
+<body>
+	<section>
+		<header>
+			<!-- left -->
+			<div>
+			</div>
+			<!-- right -->
+			<div>
+				<form>
+					<input id="inputURL" type="text" style="width: 80%;" placeholder="url"
+						value="http://127.0.0.1:8080/raw/raw.all">
+					<button onclick="onClickSubmitURL();return false;">Submit</button>
+				</form>
+				<textarea is="text-log" id="textLog" style="width: 80%; height: 80px"></textarea>
+			</div>
+		</header>
+
+		<div>
+			<select id="selectColor1"></select>
+		</div>
+		<div>
+			<canvas id="canvas" width="500" height="500"></canvas>
+			<canvas id="canvasSeq" width="500" height="500"></canvas>
+			<textarea id="textArea" style="width: 500px; height: 500px;"></textarea>
+			<div
+				style="display: inline-block; width: 500px; height: 500px; vertical-align: bottom; font-family: monospace;">
+				<p style="font-size: xx-large"></p>
+			</div>
+		</div>
+	</section>
+
+	<script src="../../common/TextLog.js"></script>
+	<script src="../../common/Basics.js"></script>
+	<script src="../../common/LoadFile.js"></script>
+	<script src="../../common/GeoSpatial.js"></script>
+
+	<script src="../../common/Canvas2DPixel.js"></script>
+	<script src="../../common/ColorPalettes.js"></script>
+
+	<!-- Required files are included at worker, just render here -->
+	<script src="../../js/ParserA.js"></script>
+	<script src="../../js/ParserEM.js"></script>
+	<script src="../../jsWorker/ManagerEM.js"></script>
+
+	<script>
+		function initColors() {
+			const s1 = document.getElementById('selectColor1');
+			Object.keys(colorPalettes).forEach(k => {
+				const opt = document.createElement('option');
+				opt.textContent = k;
+				opt.value = k;
+				s1.appendChild(opt);
+			});
+
+			s1.addEventListener('change', (e) => {
+				const selected = e.target.value;
+				window.scaleColor = createColorSchemeFrom();
+
+				refreshResultViews();
+			});
+
+			s1.value = 'bigBath'; // default
+			s1.dispatchEvent(new Event('change'));
+
+		}
+		initColors();
+
+		function refreshResultViews() {
+			if (window.dataSourceContext) {
+				const context = window.dataSourceContext;
+				draw2D(context);
+				draw2dSeq(context);
+				const json = geoJSON(context);
+				document.getElementById('textArea').value = JSON.stringify(json);
+			}
+		}
+
+		function geoJSON(context) {
+			const listResult = [];
+			context.lines.forEach(line => {
+				const lineJSON = {
+					type: "LineString",
+					coordinates: [
+					]
+				};
+
+				const coordinates = line.map(d => [Number(d[1].toFixed(5)), Number(d[0].toFixed(5))]);
+				lineJSON.coordinates = coordinates;
+				listResult.push(lineJSON);
+			});
+
+			const result = {
+				type: "FeatureCollection",
+				features: [
+					{
+						type: "Feature",
+						properties: {},
+						geometry: {
+							type: "GeometryCollection",
+							geometries: []
+						}
+					}
+				]
+			};
+
+			result.features[0].geometry.geometries = listResult;
+
+			return result;
+		}
+	
+		function createColorSchemeFrom() {
+			if (!window.dataSourceContext) {
+				return;
+			}
+
+			const context = window.dataSourceContext;
+
+			const s1 = document.getElementById('selectColor1').value;
+
+			if (!s1) {
+				return;
+			}
+
+			const list = colorPalettes[s1].map(s => ARGBtoABGR(parseInt('FF' + s.slice(1), 16)));
+			const scaleColor = createColorSceheme(context.stat.validRange, list);
+			return scaleColor;
+		}
+
+		function draw2D(context) {
+			// const z = [];
+			// context.lines[0].forEach(dot => z.push(dot[2].toString()));
+
+			const l0 = context.lines[0];
+			const l9 = context.lines.at(-1);
+
+			const d2p = new Degree2Pixel();
+			d2p.zoomAdjust([
+				[l0[0][0], l0[0][1]],
+				[l0.at(-1)[0], l0.at(-1)[1]],
+				[l9[0][0], l9[0][1]],
+				[l9.at(-1)[0], l9.at(-1)[1]]
+			]);
+
+			d2p.zoomOut();
+
+			const info = d2p.getInfo();
+			const bounds = d2p.getBounds();
+			console.log(info);
+			console.log(bounds);
+
+			const canvas = new Canvas2DPixel('canvas');
+			canvas.newImage();
+
+			// canvas.fill(0xFFEEEEEE);
+
+			let rangeDepth = [99999, 0];
+			context.lines.forEach(line => {
+				line.forEach(dot => {
+					rangeDepth[0] > dot[2] && (rangeDepth[0] = dot[2]);
+					rangeDepth[1] < dot[2] && (rangeDepth[1] = dot[2]);
+				})
+			});
+
+			// using window.scaleColor
+
+			context.lines.forEach(line => {
+				line.forEach(dot => {
+					const pixel = d2p.getPixel([dot[0], dot[1]]);
+					canvas.draw32triple(pixel[0], pixel[1], scaleColor(dot[2]));
+				});
+			});
+
+			canvas.putImage();
+		}
+
+		function basicStat(context) {
+			const z = [];
+			const lines = context.lines;
+			lines.forEach(line => line.forEach(d => z.push(d[2])));
+
+			const filtered = filterOutliers(z);
+			const mean = z.reduce((prev, curr) => prev + curr, 0) / z.length;
+			const std = Math.sqrt(z.reduce((prev, curr) => prev + Math.pow((curr - mean), 2), 0) / z.length);
+
+			return {
+				validRange: filtered.validRange,
+				extent: filtered.extent,
+				mean: mean,
+				std: std
+			}
+		}
+
+		function draw2dSeq(context) {
+			console.time('seq');
+
+			const stat = context.stat;
+
+			const eCanvas = document.getElementById('canvasSeq');
+			const w = eCanvas.width;
+			const h = eCanvas.height;
+			const margin = 50;
+
+			const scaleY = scaleLinear(stat.extent, [0, h - margin]);
+			const scaleX = scaleLinear([0, context.lines.length - 1], [margin, w]);
+
+			const canvas = new Canvas2DPixel('canvasSeq');
+			canvas.newImage();
+			context.lines.forEach((line, x) => {
+				line.forEach(dot => {
+					const posY = ~~scaleY(dot[2]);
+					const posX = ~~scaleX(x);
+
+					canvas.draw32triple(posX, posY, scaleColor(dot[2]));
+				});
+			});
+
+			canvas.putImage();
+
+			const ctx = canvas.ctx;
+
+			// -- frame
+			canvas.line(margin, 0, margin, h, '#000000', 1);
+			canvas.line(0, h - margin, w, h - margin, '#000000', 1);
+
+			// -- mean line
+			const yMean = ~~scaleY(stat.mean);
+			canvas.line(margin, yMean, w, yMean, '#333333', 1);
+
+			// -- mean Text
+			ctx.textBaseline = 'top';
+			ctx.textAlign = 'right';
+			ctx.font = '15px monospace';
+			ctx.fillText(Math.round(stat.mean) + 'm', margin - 5, yMean);
+
+			// -- range text
+			ctx.fillText(Math.round(stat.extent[0]) + 'm', margin - 5, ~~scaleY(stat.extent[0]));
+			ctx.fillText(Math.round(stat.extent[1]) + 'm', margin - 5, ~~scaleY(stat.extent[1]));
+
+			// -- filterout
+			const yFilter0 = ~~scaleY(stat.validRange[0]);
+			const yFilter1 = ~~scaleY(stat.validRange[1]);
+			canvas.line(margin, yFilter0, w, yFilter0, '#AAAAAA', 1);
+			canvas.line(margin, yFilter1, w, yFilter1, '#AAAAAA', 1);
+
+			// -- filterout text
+			ctx.fillText(Math.round(stat.validRange[0]) + 'm', margin - 5, yFilter0);
+			ctx.fillText(Math.round(stat.validRange[1]) + 'm', margin - 5, yFilter1);
+
+			console.timeEnd('seq');
+		}
+	</script>
+
+	<script>
+		async function onClickSubmitURL() {
+			const e = document.getElementById('inputURL');
+			const url = e.value;
+			if (!url.match(/^http/i)) {
+				alert('invalid url, only accept starting with http');
+				return;
+			}
+
+			const ab = await fetchFileFromURL(url, TextLog.Append);
+			ManagerEM.queueWork(ab);
+		}
+
+		ManagerEM.setOnMessage((e) => {
+			const msg = e.data;
+			if ('log' === msg.type) {
+				TextLog.Append(msg.data);
+			} else if ('main' === msg.type) {
+				PLog.Append(msg.data);
+			} else if ('result' === msg.type) {
+				const obj = e.data.data;
+
+				// -- IMPORTANT, requires ParserEM
+				// -- its just object, not context instance, need to type cast
+				// -- Manager can not do that
+				const context = ParserEM.ParserContext.CreateInstanceFrom(obj);
+				window.dataSourceContext = context;
+
+				context.clearMemory();
+				const stat = basicStat(context);
+				context.stat = stat;
+
+				window.dataSourceContext = context;
+				window.scaleColor = createColorSchemeFrom();
+
+				refreshResultViews();
+
+			}
+		});
+
+
+		// -- debug
+		setTimeout(onClickSubmitURL, 1);
+	</script>
+</body>
+
+</html>

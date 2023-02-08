@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>SeaBird CTD Report</title>
+
+	<style>
+		table,
+		th,
+		td {
+			border: 1px solid black;
+			border-collapse: collapse;
+		}
+
+		.parent4 {
+			display: grid;
+			grid-template-columns: repeat(4, 1fr);
+			/* grid-template-rows: repeat(5, 1fr); */
+			/* grid-column-gap: 0px; */
+			/* grid-row-gap: 0px; */
+		}
+
+		.parent2 {
+			display: grid;
+			grid-template-columns: repeat(2, 1fr);
+		}
+
+		.section-result {
+			display: none;
+		}
+	</style>
+</head>
+
+<body>
+	<section>
+	</section>
+	<section>
+		<input id="file" type="file" multiple="true" style="width: 95vw; height: 20vh; border: 1px solid red;"
+			onchange="onChangeFile()">
+	</section>
+
+	<section class="section-result">
+		<article>
+			<div>
+				<h1>
+					ALL Cruise : <span id="txtCruiseTime"></span>,
+					Casting took : <span id="txtCTDCastingMin"></span>,
+					Navigation took : <span id="txtNavigationMin"></span>,
+					CTD Casting : <span id="txtCTDCasting"></span> times
+				</h1>
+
+				<canvas id="canvasPosition" width="800" height="500" style="display: none"></canvas>
+				<svg id="canvasSVG" width="500" height="500">
+				</svg>
+				<!-- <svg id="svg" width="1000" height="500"></svg> -->
+
+				<canvas id="canvasTimeSeries" width="500" height="500"></canvas>
+				<canvas id="canvasTimeSeriesLegend" width="100" height="100" style="vertical-align: top;"></canvas>
+			</div>
+			<div>
+				<ctd-group-list id="ctdGroupList"></ctd-group-list>
+			</div>
+		</article>
+	</section>
+
+	<div style="break-after:page"></div>
+
+	<section id="areaDetails" class="section-result">
+		<!-- <ctd-group-detail id="resultDetail"></ctd-group-detail> -->
+	</section>
+
+	<script src="../../js/ParserCTD.js"></script>
+	<script src="../../common/Basics.js"></script>
+	<script src="../../common/GeoSpatial.js"></script>
+	<script src="../../common/Canvas2DPixel.js"></script>
+	<script src="../../common/SVGE.js"></script>
+
+	<script src="./CTDElements.js"></script>
+
+	<script>
+		setTimeout(async () => {
+			const r = await fetch('./P.json');
+			const json = await r.json();
+			console.log(json);
+
+			// drawSamples2(json);
+			// drawSamplesCanvas(json);
+			// drawSamplesCanvasLegend();
+		}, 1);
+
+		// TODO Clean this code
+		const colorblue = [
+			'#0303b1',
+			'#1404a6',
+			'#25049b',
+			'#360590',
+			'#470685',
+			'#58067a',
+			'#69076f',
+			'#7a0864',
+			'#8a0859',
+			'#9b094e',
+			'#ac0943',
+			'#bd0a38',
+			'#ce0b2d',
+			'#df0b22',
+			'#f00c17',
+		]
+
+		function drawSamplesCanvas(json) {
+			const canvas = document.getElementById('canvasTimeSeries');
+			const ctx = canvas.getContext('2d');
+
+			const w = canvas.width;
+			const h = canvas.height;
+
+			const scaleY = scaleLinear([0, 500], [0, h]);
+			const scaleX = scaleLinear([0, json.length], [0, w]);
+			const scaleColor = createColorSceheme([0, 35], colorblue);
+			const width = ~~(scaleX(1) + 1); // floor can make blank so plus 1
+			const height = 10; // just fixed pixel not to make blank
+
+			for (let i = 0; i < json.length; i++) {
+				const summary = json[i];
+				const sample = summary.samples;
+				const name = summary.name;
+
+				const x = scaleX(i);
+				for (let j = 0; j < sample.length; j++) {
+					const item = sample[j];
+					const depth = item[3];
+					if (depth > 500) { // only goes 500m depth
+						break;
+					}
+
+					const temp = item[1];
+					const y = ~~scaleY(depth);
+					const color = scaleColor(temp);
+
+					// ctx.beginPath();
+					ctx.fillStyle = color;
+					ctx.fillRect(x, y, width, height);
+				}
+
+				// -- file name
+				ctx.font = "15px Arial";
+				ctx.fillStyle = 'white';
+				ctx.fillText(name, x + 2, 40);
+			}
+
+			// -- 0m ~ 500m
+			ctx.font = "15px Arial";
+			ctx.fillStyle = 'white';
+
+			ctx.fillText('0m', 475, 20);
+			if (500 > json.at(-1).samples.at(-1)[3]) {
+				ctx.fillStyle = 'black';
+			}
+			ctx.fillText('500m', 455, 490);
+
+			// -- frame
+			ctx.beginPath();
+			ctx.strokeStyle = 'black';
+			ctx.rect(0, 0, w, h);
+			ctx.stroke();
+		}
+
+
+		function drawSamplesCanvasLegend() {
+			const canvas = document.getElementById('canvasTimeSeriesLegend');
+			const ctx = canvas.getContext('2d');
+
+			const w = canvas.width;
+			const h = canvas.height;
+			const scaleColor = createColorSceheme([0, w], colorblue);
+			const height = 10;
+
+			for (let i = 0; i < w; i++) {
+				const color = scaleColor(i);
+				ctx.fillStyle = color;
+				ctx.fillRect(i, 0, 1, height);
+			}
+
+			ctx.font = "15px Arial";
+			ctx.fillStyle = 'black';
+			ctx.fillText('0', 2, 30);
+			ctx.fillText('35', 80, 30);
+		}
+	</script>
+
+	<script>
+
+		function onChangeFileDone() {
+			if (window.timerChangeFile) {
+				clearTimeout(window.timerChangeFile);
+			}
+
+			window.timerChangeFile = setTimeout(() => {
+				postProcess();
+			}, 100);
+		}
+
+		function init() {
+			const fileList = new ParserCTD.CTDFileList();
+			window.fileList = fileList;
+
+			window.canvasPosition = new Canvas2DPixel('canvasPosition');
+
+			window.d2p = new Degree2Pixel();
+		}
+
+		function onChangeFile() {
+			const e = document.getElementById('file');
+
+			Array.from(e.files).forEach(file => {
+				fileList.addFile(file);
+			});
+
+			onChangeFileDone();
+
+			e.style.display = 'none';
+		}
+
+		async function postProcess() {
+			const groups = fileList.getGroups();
+			const len = groups.length;
+			for (let i = 0; i < len; i++) {
+				const group = groups[i];
+				console.time('parse');
+				await group.parse();
+				parseCTDReport(group);
+				console.timeEnd('parse');
+				group.getHex().unload();
+			}
+
+			// -- all parsed
+			groups.sort((a, b) => a.summary.date[0].getTime() - b.summary.date[0].getTime());
+			console.log(groups);
+			summaryCTDReport(groups);
+
+			// drawPositions(groups);
+			drawPositionsSVG(groups);
+
+			refreshDetails(groups);
+
+			drawSamplesCanvas(groups.map(d => d.summary));
+			drawSamplesCanvasLegend();
+
+			// const down = groups.map(d => d.summary);
+			// downloadObjectAsJson(down, 'dd.json');
+
+			// -- show result sections
+			Array.from(document.getElementsByClassName('section-result')).forEach(e => e.style.display = 'block');
+		}
+
+		function downloadObjectAsJson(exportObj, exportName) {
+			var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportObj));
+			var downloadAnchorNode = document.createElement('a');
+			downloadAnchorNode.setAttribute("href", dataStr);
+			downloadAnchorNode.setAttribute("download", exportName + ".json");
+			document.body.appendChild(downloadAnchorNode); // required for firefox
+			downloadAnchorNode.click();
+			downloadAnchorNode.remove();
+		}
+
+		function summaryCTDReport(groups) {
+			if (groups.at(-1).summary.date[1]) {
+
+				// -- cruise time
+				const msCruise = groups.at(-1).summary.date[1].getTime() - groups[0].summary.date[0].getTime();
+				document.getElementById('txtCruiseTime').textContent = msToReadable(msCruise);
+
+				// -- casting count
+				document.getElementById('txtCTDCasting').textContent = groups.length;
+
+				// -- casting time
+				const msCasting = groups.map(group => group.summary.date[1].getTime() - group.summary.date[0].getTime()).reduce((a, b) => a + b, 0);
+				document.getElementById('txtCTDCastingMin').textContent = msToReadable(msCasting);
+
+				document.getElementById('txtNavigationMin').textContent = msToReadable(msCruise - msCasting);
+			}
+
+
+			// -- order of files
+			groups.forEach(group => {
+				document.getElementById('ctdGroupList').addGroup(group);
+			});
+		}
+
+		function drawPositions(groups) {
+			const positions = groups.map(group => {
+				const header = group.getHdr().getParsedHDR();
+				return [header.lat, header.lng];
+			});
+
+			const d2p = window.d2p;
+			d2p.zoomAdjust(positions);
+			d2p.zoomOut();
+
+			const canvas = window.canvasPosition;
+			const ctx = canvas.ctx;
+
+			const pixels = positions.map(d => d2p.getPixel(d));
+
+			// -- line + text
+			ctx.font = "14px monospace";
+
+			ctx.beginPath();
+			pixels.forEach((p, i) => {
+				if (0 === i) {
+					ctx.moveTo(p[0], p[1]);
+				} else {
+					ctx.lineTo(p[0], p[1]);
+				}
+
+				const name = groups[i].name;
+				ctx.fillText(name, p[0] + 15, p[1]);
+			});
+			ctx.lineWidth = 1;
+			ctx.stroke();
+
+			// -- circle
+			pixels.forEach(p => {
+				ctx.beginPath();
+				ctx.arc(p[0], p[1], 5, 0, 2 * Math.PI);
+				ctx.fillStyle = 'red';
+				ctx.fill();
+			});
+		}
+
+		function drawPositionsSVG(groups) {
+			const positions = groups.map(group => {
+				const header = group.getHdr().getParsedHDR();
+				return [header.lat, header.lng];
+			});
+
+			const w = 500, h = 500;
+
+			const d2p = new Degree2Pixel();
+			d2p.setMapSize([w, h]);
+
+			d2p.zoomAdjust(positions);
+			d2p.zoomOut();
+
+			const b = d2p.getBounds();
+			console.log(b);
+
+			const ns = "http://www.w3.org/2000/svg";
+			const svg = document.getElementById('canvasSVG')
+
+			const pixels = positions.map(d => d2p.getPixel(d));
+
+			const navPath = svgp();
+			pixels.forEach((p, i) => {
+				const circle = document.createElementNS(ns, 'circle');
+				circle.setAttributeNS(null, 'cx', p[0]);
+				circle.setAttributeNS(null, 'cy', p[1]);
+				circle.setAttributeNS(null, 'fill', 'red');
+				circle.setAttributeNS(null, 'r', 10);
+
+				const text = document.createElementNS(ns, 'text');
+				text.setAttributeNS(null, 'x', p[0] + 10);
+				text.setAttributeNS(null, 'y', p[1]);
+				text.textContent = groups[i].name;
+
+				navPath.add(p[0], p[1]);
+
+				svg.appendChild(circle);
+				svg.appendChild(text);
+			});
+
+			svg.appendChild(navPath.create());
+
+			// -- frame
+			const frame = document.createElementNS(ns, 'rect');
+			frame.setAttributeNS(null, 'x', 0);
+			frame.setAttributeNS(null, 'y', 0);
+			frame.setAttributeNS(null, 'width', w);
+			frame.setAttributeNS(null, 'height', h);
+			frame.setAttributeNS(null, 'stroke', 'black');
+			frame.setAttributeNS(null, 'fill', 'none');
+			svg.appendChild(frame);
+		}
+
+		function refreshDetails(groups) {
+			const parents = document.getElementById('areaDetails');
+			groups.forEach(g => {
+				const e = new CTDGroupDetail(g);
+				parents.appendChild(e);
+
+				const pageBreak = document.createElement('div');
+				pageBreak.style.pageBreakBefore = 'always';
+				parents.appendChild(pageBreak);
+			});
+
+			// -- remove last page breaker
+			parents.childNodes[parents.childNodes.length - 1].remove();
+		}
+
+		function parseCTDReport(group) {
+			parseCTDReportHex(group);
+			parseCTDReportXMLCON(group);
+			parseCTDReportBL(group);
+		}
+
+		function findDownCast(depthDiff) {
+			// -- just difference points
+			const diffPoint = [];
+			let lastMeanSign = 0;
+			for (let i = 0; i < depthDiff.length; i++) {
+				const item = depthDiff[i];
+
+				const sign = item.mean > 0 ? 1 : (item.mean < 0 ? -1 : 0);
+				if (lastMeanSign !== sign) {
+					diffPoint.push(item);
+				}
+
+				lastMeanSign = sign;
+			}
+
+			// -- points to group start Index ~ end Index
+			const diffGroup = [];
+			for (let i = 1; i < diffPoint.length; i++) {
+				const prev = diffPoint[i - 1];
+				const item = diffPoint[i];
+
+				const mm = { mean: prev.mean, s: prev.idx, e: item.idx };
+				diffGroup.push(mm);
+			}
+
+			// -- find the biggest signed duration, max(e - s)
+			const maxDiffGroup = diffGroup.reduce((a, b) => {
+				if (0 >= b.mean) {
+					return a;
+				}
+
+				const ad = a.e - a.s;
+				const bd = b.e - b.s;
+				if (bd >= ad) {
+					return b;
+				}
+				return a;
+			}, diffGroup[0]);
+
+			// maxDiffGroup.e is the deepest, but maxDiffGroup.s is usually 50m
+
+			// -- reverse from maxGroup until mean is NEGATIVE
+			const idx = diffGroup.filter(d => d.s < maxDiffGroup.s).findLastIndex(d => d.mean < 0);
+			// -- idx is NEGATIVE, next group is usually mean 0, around 4m ~ 6m
+			const minDiffGroup = diffGroup[idx + 1];
+
+			// console.log(diffPoint);
+			// console.log(diffGroup);
+			// console.log(minDiffGroup, maxDiffGroup);
+
+			// use minDiffGroup.s ~ maxDiffGroup.e
+			return [minDiffGroup.s, maxDiffGroup.e];
+		}
+
+		function parseCTDReportHex(group) {
+			const hex = group.getHex();
+			const len = hex.getLength();
+
+			let step = 20;
+
+			if (len > 10000) {
+				step = 100;
+			}
+
+			const obj = {
+				// only for primary frequency and first altimeter
+				a: [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER], // altimeter
+				t: [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER], // temperature
+				s: [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER], // salinity
+				d: [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER], // depth
+			};
+
+			const result = [];
+			const depthDiff = []; // first is zero
+			let lastDepth = 0;
+			const three = [];
+			const round = (f) => ParserCTD.SeaConvert.Round(f, 5);
+			const toMin = (idx, c) => {
+				const v = c.value;
+				const line = [idx, round(v.f0), round(v.f1psu), round(v.f2depth), round(v.altimeter)];
+				return line;
+			}
+
+			for (let i = 100; i < len; i = i + step) {
+				const c = hex.parseValue(i); // this is full parse, can be optimized
+				const v = c.value;
+				const line = toMin(i, c);
+				result.push(line);
+
+				let diff = Math.round(v.f2depth - lastDepth);
+				lastDepth = v.f2depth;
+				three.push(diff);
+
+				if (3 < three.length) {
+					three.shift();
+				}
+
+				const mean = Math.round(three.reduce((a, b) => a + b, 0) / three.length);
+				depthDiff.push({ diff: diff, idx: i, mean: mean });
+
+				// // -- save idx for later use
+				// c.idx = i;
+
+				// result.push(c);
+
+				// -- TODO change this values with in downcast
+				minMax(obj, 'a', c.value.altimeter);
+				minMax(obj, 't', c.value.f0);
+				minMax(obj, 's', c.value.f1psu);
+				minMax(obj, 'd', c.value.f2depth);
+			}
+
+			const downcast = findDownCast(depthDiff);
+			const cs = toMin(downcast[0], hex.parseValue(downcast[0]));
+			const ce = toMin(downcast[1], hex.parseValue(downcast[1]));
+			// -- 1800 samples for 37MB hex
+			const samples = result.filter(item => item[0] >= downcast[0] && item[0] < downcast[1]);
+
+			group.summary = obj;
+
+			// -- date
+			const nmeaDuration = [hex.parseValue(100).date, hex.parseValue(len - 100).date];
+			group.summary.date = nmeaDuration;
+
+			// -- saves samples
+			group.summary.samples = samples;
+
+			// -- saves name again
+			group.summary.name = group.name;
+		}
+
+		function prettyPrintSensor(item) {
+			if (item) {
+				const type = item.type.slice(0, 3);
+				return `${type}_${item.serial}`;
+			}
+
+			return undefined;
+		}
+
+		function parseCTDReportXMLCON(group) {
+			const xml = group.getXmlcon();
+
+			if (!group.summary) {
+				group.summary = {};
+			}
+
+			group.summary.sensors = xml.parsedMap;
+		}
+
+		function parseCTDReportBL(group) {
+			const bl = group.getBl();
+
+			if (!group.summary) {
+				group.summary = {};
+			}
+
+			group.summary.bl = bl.getParsedBL();
+		}
+
+		// obj should initialized
+		function minMax(obj, name, value) {
+			obj[name][0] > value && (obj[name][0] = value);
+			obj[name][1] < value && (obj[name][1] = value);
+		}
+
+		function msToReadable(ms, fullFormat) {
+			const min = ~~(ms / 1000 / 60);
+
+			const d = Math.floor(min / (24 * 60));
+			const h = Math.floor((min % (24 * 60)) / 60);
+			const m = min % 60;
+
+			const r = [];
+
+			if (fullFormat) {
+
+				const rtf1 = new Intl.RelativeTimeFormat('en');
+
+				if (0 < d) {
+					const f = rtf1.formatToParts(d, 'day');
+					r.push(f[1].value + f[2].value);
+				}
+
+				if (0 < h) {
+					const f = rtf1.formatToParts(h, 'hour');
+					r.push(f[1].value + f[2].value);
+				}
+
+				if (0 < m) {
+					const f = rtf1.formatToParts(m, 'minute');
+					r.push(f[1].value + f[2].value);
+				}
+
+				return r.join(' ');
+			} else {
+				if (0 < d) {
+					r.push(`${d}d`);
+				}
+
+				if (0 < h) {
+					r.push(`${h}h`);
+				}
+
+				if (0 < m) {
+					r.push(`${m}m`);
+				}
+
+				return r.join(' ');
+			}
+		}
+
+		init();
+	</script>
+</body>
+
+</html>

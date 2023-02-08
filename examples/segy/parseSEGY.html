@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Parse SEGY</title>
+	<style>
+		section {
+			display: flex;
+			flex-direction: column;
+		}
+
+		.main {
+			display: flex;
+			flex-direction: row;
+			flex: 4;
+		}
+
+		header {
+			flex: 1;
+			display: flex;
+		}
+
+		header>div {
+			height: 120px;
+			flex: 1;
+		}
+	</style>
+</head>
+
+<body>
+	<section>
+		<header>
+			<!-- left -->
+			<div>
+				<p>Endian : <span id="txtEndian">Unknown</span> endian, Sample Code : <span id="txtSampleCode">Not found</span></p>
+				<p>Trace : <span id="txtTrace1"></span><br/><span id="txtTrace2"></span></p>
+			</div>
+			<!-- right -->
+			<div>
+				<form>
+					<input id="inputURL" type="text" style="width: 80%;" placeholder="url"
+						value="http://127.0.0.1:8080/raw/SLF1805041114.sgy">
+						<!-- value="http://127.0.0.1:8080/raw/PHF1805041714.sgy"> -->
+					<button onclick="onClickSubmitURL();return false;">Submit</button>
+				</form>
+				<textarea is="text-log" id="textLog" style="width: 80%; height: 80px"></textarea>
+			</div>
+		</header>
+
+		<div class="main">
+			<!-- List Sections -->
+			<nav style="flex: 1; overflow-y: scroll;">
+				<list-sections id="listSections" data-filter='[]' data-title="title" data-value="type"
+					data-page-size="50">
+				</list-sections>
+			</nav>
+
+			<!-- Detail -->
+			<article id="articleDescribe" style="flex: 2; height: 80vh; overflow-y: scroll;">
+				<describe-view id="describeView"></describe-view>
+			</article>
+
+			<!-- Hexview -->
+			<article id="articleHex" style="flex: 2; height: 80vh; overflow-y: scroll;">
+				<hex-view id="hexView"></hex-view>
+			</article>
+		</div>
+	</section>
+
+	<script src="../../common/TextLog.js"></script>
+	<script src="../../common/Basics.js"></script>
+	<script src="../../common/LoadFile.js"></script>
+	<script src="../../common/ListSections.js"></script>
+	<script src="../../common/HexView.js"></script>
+	<script src="../../common/DescribeView.js"></script>
+
+	<script src="../../js/ParserA.js"></script>
+	<script src="../../js/ParserSEGY.js"></script>
+
+	<script>
+		// -- listSections
+		const listSections = document.getElementById('listSections');
+		const filter = [];
+		listSections.setAttribute('data-filter', JSON.stringify(filter));
+		listSections.setOnClickListener((e) => {
+			const item = e.target.getDataSource();
+			console.log(item);
+
+			const context = window.dataSourceContext;
+			const dataView = new DataView(context.dataView.buffer, item.offset, item.len);
+
+			// -- just because sampleCode is not needed with binHeader
+			if(ParserSEGY.SEGY.IsMyType(item.type)) {
+				document.getElementById('articleDescribe').scrollTop = 0;
+				document.getElementById('articleHex').scrollTop = 0;
+
+				const parsed = ParserSEGY.SEGY.ParseSectionDescribe(dataView, 0, context.isLE);
+				const area = document.getElementById('describeView');
+				area.setDataSource(parsed);
+				console.log(parsed);
+			} else if(ParserSEGY.SEGYTrace.IsMyType(item.type)) {
+				document.getElementById('articleDescribe').scrollTop = 0;
+				document.getElementById('articleHex').scrollTop = 0;
+
+				const parsed = ParserSEGY.SEGYTrace.ParseSectionDescribe4F(dataView, 0, context.isLE);
+				const area = document.getElementById('describeView');
+				area.setDataSource(parsed);
+				console.log(parsed);
+
+				const metaTrace = ParserSEGY.SEGYTrace.ParseSection(dataView, 0, context.isLE);
+				console.log(metaTrace);
+				const meta1 = `TraceSeq ${metaTrace[0]}, ${metaTrace[3].toLocaleString('af')}, LatLng [${metaTrace[5].toFixed(5)}, ${metaTrace[6].toFixed(5)}]`;
+				const meta2 = `NumSamples ${metaTrace[1]}, Interval ${metaTrace[2]}`;
+				document.getElementById('txtTrace1').textContent = meta1;
+				document.getElementById('txtTrace2').textContent = meta2;
+			}
+
+			const hexView = document.getElementById('hexView');
+			hexView.setDataSource(dataView);
+		});
+
+		// -- describeView
+		const describeView = document.getElementById('describeView');
+		describeView.setOnMouseOverListener((start, size) => {
+			const selected = hexView.select(start, start + size);
+
+			// -- scroll to cursor
+			const s1 = selected[0];
+			s1.scrollIntoView();
+		});
+
+		// -- hexView
+		const hexView = document.getElementById('hexView')
+
+	</script>
+	<script>
+		async function onClickSubmitURL() {
+			const e = document.getElementById('inputURL');
+			const url = e.value;
+			if (!url.match(/^http/i)) {
+				alert('invalid url, only accept starting with http');
+				return;
+			}
+
+			const d1 = new Date();
+			const ab = await fetchFileFromURL(url, TextLog.Append);
+			const d2 = new Date();
+			TextLog.Append(`fetch done ${(d2.getTime() - d1.getTime())}ms`);
+
+			parseSEGY(ab);
+
+			const d3 = new Date();
+			TextLog.Append(`parse sections done ${(d3.getTime() - d2.getTime())}ms`);
+		}
+
+		function parseSEGY(ab) {
+			const segy = ParserSEGY.ParserTest.LoadArrayBuffer(ab);
+			window.dataSourceContext = segy;
+
+			document.getElementById('txtEndian').textContent = true === segy.isLE ? 'Little' : 'Big';
+		
+
+			const sections = segy.sections;
+			listSections.setDataSource(sections);
+
+			// -- samplecode
+			const code = segy.bin.get('code').v;
+			if(code) {
+				const sampleCodeFound = ParserSEGY.SEGY.SAMPLE_FORMAT_CODE.find(d => code === d[0]);
+				document.getElementById('txtSampleCode').textContent = sampleCodeFound[1];
+			}
+
+			console.log(segy);
+		}
+
+		setTimeout(onClickSubmitURL, 1);
+	</script>
+</body>
+
+</html>
