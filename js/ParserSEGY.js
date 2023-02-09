@@ -1,4 +1,4 @@
-ParserSEGY = (() => {
+const ParserSEGY = (() => {
 	class SEGY {
 		static TYPES = [0x01];
 		static IsMyType(type) {

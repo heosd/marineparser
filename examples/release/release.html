@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Release code</title>
+</head>
+
+<body>
+	<h1>Marine Parser release code</h1>
+	<button onclick="download()">Download MarineParser.js</button>
+	<br>
+	<br>
+	<textarea id="release" style="width: 1000px; height: 500px;" readonly="readonly"></textarea>
+
+<script id="templateMarineParser" type="template">
+const MarineParser = (() => {
+	#allJS#
+	return {
+		#names#
+	}
+})();
+</script>
+
+	<script>
+		function download() {
+			const str = document.getElementById('release').value;
+
+			const encoded = "data:text/javascript;charset=utf-8," + encodeURIComponent(str);
+			const a = document.createElement('a');
+			a.setAttribute('href', encoded);
+			a.setAttribute('download', 'MarineParser.js');
+
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+		}
+
+		async function main() {
+			const files = ['ParserA', 'ParserEM', 'ParserSEGY', 'ParserCTD'];
+			let allJS = '';
+			for(let i = 0; i < files.length; i++) {
+				const file = files[i];
+				const r = await fetch(`../../js/${file}.js`);
+				const text = await r.text();
+				allJS = allJS + text + '\n';
+			}
+
+			const template = document.getElementById('templateMarineParser').textContent;
+			const j1 = template.replace('#allJS#', allJS);
+			const j2 = j1.replace('#names#', files.map(d => `${d}: ${d}`).join(',\n\t\t'));
+
+			document.getElementById('release').value = j2;
+		}
+
+		setTimeout(main, 1);
+	</script>
+</body>
+
+</html>

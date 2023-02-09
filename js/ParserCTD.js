@@ -1,4 +1,4 @@
-ParserCTD = (() => {
+const ParserCTD = (() => {
 	function getValueFromObject(obj, exp) {
 		const m = exp.match(/([^\.\[]*)/g);
 		const list = [];
@@ -1292,17 +1292,17 @@ ParserCTD = (() => {
 		static PrettyPrint(v, unit, d = 4, pad = true, space = true) {
 			const rounded = SeaConvert.Round(v, d);
 			let str = '';
-			if(pad) {
+			if (pad) {
 				str = rounded.toFixed(d);
 			} else {
 				str = String(rounded);
 			}
 
-			if(space) {
+			if (space) {
 				str = str + ' ';
 			}
 
-			if(unit) {
+			if (unit) {
 				str = str + unit;
 			}
 
@@ -1310,10 +1310,10 @@ ParserCTD = (() => {
 		}
 
 		static PrettySensor(sensor, length = 3) {
-			if(0 === length) {
+			if (0 === length) {
 				return sensor.type + ' ' + sensor.serial;
 			}
-			
+
 			return sensor.type.slice(0, length) + ' ' + sensor.serial;
 		}
 

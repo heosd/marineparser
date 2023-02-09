@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Load dist</title>
+</head>
+
+<body>
+	<ul id="area-obj">
+	</ul>
+	<script src="../../dist/MarineParser.js"></script>
+	<script>
+		const p = document.getElementById('area-obj');
+		for(const [k, v] of Object.entries(MarineParser)) {
+			const li = document.createElement('li');
+			li.textContent = k;
+			p.appendChild(li);
+		}
+
+		const li = document.createElement('li');
+		li.textContent = 'PSU from SeaConvert : ' + MarineParser.ParserCTD.SeaConvert.PSU;
+		p.appendChild(li);
+	</script>
+</body>
+
+</html>
