@@ -103,6 +103,22 @@ const ParserA = (() => {
 			});
 		};
 
+		// // created Reader to combine with DataView
+		// // header = PD0Header.ReadHeader._withDataView(dataView, 2400, true);
+		// // const value = header.hID;
+		// obj._withDataView = (dv, baseOffset, littleEndian) => {
+		// 	const newObj = {};
+		// 	struct.forEach((_, k) => {
+		// 		Object.defineProperty(newObj, k, {
+		// 			get() {
+		// 				return obj[k](dv, baseOffset, littleEndian);
+		// 			}
+		// 		});
+		// 	});
+
+		// 	return newObj;
+		// }
+
 		return obj;
 	}
 
