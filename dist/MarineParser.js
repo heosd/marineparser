@@ -4499,146 +4499,6 @@ const ParserPD0 = (() => {
 		}
 	}
 
-	// // -- Only one PD0
-	// // -- parsedBrief - header
-	// // -- parsedDetail [fixed, variable, velocity...]
-	// // extending PD0 is only for LittleEndian !!!!
-	// class PD0x extends EndianDataView {
-	// 	constructor(arrayBuffer, byteOffset, byteLength) {
-	// 		super(arrayBuffer, byteOffset, byteLength);
-
-	// 		this.setLittleEndian(true);
-	// 	}
-
-	// 	parseBrief() {
-	// 		// -- parse header only
-	// 		const header = new PD0Header(this.buffer, this.byteOffset, this.byteLength);
-	// 		header.parseDetail();
-
-	// 		this.saveBrief(header.parsedDetail);
-	// 	}
-
-	// 	parseDetail() {
-	// 		// -- parse other lists
-	// 		this.parsedDetail = [];
-
-	// 		if (!this.parsedBrief) {
-	// 			console.error(`PD0 has no parsedBrief, can not proceed to parse`);
-	// 			return false;
-	// 		}
-
-	// 		for (let index = 0; index < this.parsedBrief.offsets.length; index++) {
-	// 			const item = this.parsedBrief.offsets[index];
-
-	// 			// -- unregistered type, ignored
-	// 			if (!item.obj) {
-	// 				continue;
-	// 			}
-
-	// 			// -- unregistered class, ignored
-	// 			if (!item.obj.cls) {
-	// 				continue;
-	// 			}
-
-	// 			const instance = new item.obj.cls(this.buffer, this.byteOffset + item.offsetRel, item.size);
-	// 			instance.setLittleEndian(this.littleEndian);
-	// 			instance.parseDetail();
-	// 			instance.title = item.obj.title;
-
-	// 			this.parsedDetail.push(instance);
-	// 		}
-	// 	}
-
-	// 	parseVelocity2D() {
-	// 		const fixedInstance = this.getByHID(TDPD0.HID.FIXED);
-	// 		const velocityInstance = this.getByHID(TDPD0.HID.VELOCITY);
-	// 		const navigationInstance = this.getByHID(TDPD0.HID.NAV);
-
-	// 		const r = velocityInstance.parseVelocity2D(fixedInstance.parsedDetail.coordParsed.type);
-	// 		velocityInstance.parseMDNav(navigationInstance.parsedDetail.SMG, navigationInstance.parsedDetail.parsed.DMG);
-	// 		// -- r maybe false
-	// 	}
-
-
-	// 	// -- Returning results, hid is object type TDPD0.HID.CORR
-	// 	getByHID(hid) {
-	// 		if ('object' !== typeof hid) {
-	// 			return false;
-	// 		}
-
-	// 		if (!this.getDetail()) {
-	// 			return false;
-	// 		}
-
-	// 		const code = hid.code;
-
-	// 		return this.getDetail().find(item => code === item.getDetail().hID);
-	// 	}
-
-	// 	// -- Delegate from variable leader
-	// 	getTimestamp() {
-	// 		const v = this.getByHID(TDPD0.HID.VARIABLE);
-	// 		if (v) {
-	// 			return v.getTimestamp();
-	// 		}
-
-	// 		return false;
-	// 	}
-	// }
-
-	// class PD0Headerx extends PD0 {
-	// 	static HEADER = new Map([
-	// 		['hID', 'U1'], // fixed 7F
-	// 		['srcID', 'U1'], // fixed 7F
-	// 		['noBytesEns', 'U2'],
-	// 		['spare01', 'U1'],
-	// 		['noDataTypes', 'U1'],
-	// 	]);
-
-	// 	// parseDetail() {
-	// 	// 	const me = this;
-
-	// 	// 	this.setParseOffset(0);
-
-	// 	// 	// -- Header
-	// 	// 	const header = this.parse(PD0Header.HEADER);
-	// 	// 	const offsetDataType = [], offsetAbsolute = [];
-
-	// 	// 	for (let i = 0; i < header.noDataTypes; i++) {
-	// 	// 		const relativeOffset = this.getUint16(this.parseOffset);
-	// 	// 		offsetDataType.push({ offsetRel: relativeOffset });
-	// 	// 		this.addParseOffset(2);
-	// 	// 	}
-
-	// 	// 	header.offsets = offsetDataType;
-
-	// 	// 	// -- Save obj.size = totalSize - thisObj.offset;
-	// 	// 	// -- Save lastObj.size = thisObj.offset - lastObj.offset; -- overwrite
-	// 	// 	let lastObj = undefined;
-	// 	// 	offsetDataType.forEach((obj) => {
-	// 	// 		// -- Calculating header size
-	// 	// 		obj.size = header.noBytesEns + 2 - obj.offsetRel;
-	// 	// 		if (lastObj) {
-	// 	// 			const size = obj.offsetRel - lastObj.offsetRel;
-	// 	// 			lastObj.size = size;
-	// 	// 		}
-	// 	// 		lastObj = obj
-
-	// 	// 		// -- Predefined type check
-	// 	// 		const hid = me.getUint16(obj.offsetRel);
-	// 	// 		const objHID = TDPD0.JudgetHID(hid);
-	// 	// 		if (!objHID) {
-	// 	// 			// -- Takes too long
-	// 	// 			console.error(`Invalid HID 0x${hid.toString(16)}`);
-	// 	// 		}
-	// 	// 		obj.obj = objHID;
-	// 	// 	});
-
-	// 	// 	this.saveDetail(header);
-	// 	// }
-	// }
-
-
 	class PD0Fixed {
 		static TYPES = [0x0000];
 		static IsMyType(type) {
@@ -4818,6 +4678,12 @@ const ParserPD0 = (() => {
 
 		static ReadFixedLeader = ParserA.CreateReader(PD0Fixed.FIXED_LEADER);
 
+		static ParseSysCfg(dataView, offset, littleEndian) {
+			const value = PD0Fixed.ReadFixedLeader.sysCfg(dataView, offset, littleEndian);
+			const parsed = PD0Fixed.ParseSysConfig(value);
+			return parsed;
+		}
+
 		static ParseCoord(dataView, offset, littleEndian) {
 			const coordType = PD0Fixed.ReadFixedLeader.coordTransf(dataView, offset, littleEndian);
 			const coord = PD0Fixed.ParseCoordTransform(coordType);
@@ -4829,46 +4695,8 @@ const ParserPD0 = (() => {
 
 			PD0Fixed.ReadFixedLeader._toDescribeMap(dataView, offset, result, littleEndian);
 
-			// const sysCfgParsed = PD0Fixed.ParseSysConfig(result.get('sysCfg'));
-			// result.set('sysCfgParsed', sysCfgParsed);
-
-			// const coordParsed = PD0Fixed.ParseCoordTransform(result.get('coordTransf'));
-			// result.set('coordParsed', coordParsed);
-
-			// const sensorSrcParsed = PD0Fixed.ParseSensorSrc(result.get('sensorSrc'));
-			// result.set('sensorSrcParsed', sensorSrcParsed);
-
-			// -- Scale
-			// r.hdtAli = r.hdtAli * 0.01; // -- Degree
-			// r.hdtBias = r.hdtBias * 0.01; // -- Degree
-			// -- todo in parseSection
-
 			return result;
 		}
-
-		// parseDetail() {
-		// 	const r = this.parse(PD0Fixed.FIXED_LEADER, 0);
-		// 	if (TDPD0.HID.FIXED.code !== r.hID) {
-		// 		console.error(`Invalid HID ${r.hID.toString(16)}`);
-		// 		return;
-		// 	}
-
-		// 	const sysCfgParsed = PD0Fixed.ParseSysConfig(r.sysCfg);
-		// 	r.sysCfgParsed = sysCfgParsed;
-
-		// 	const coordParsed = PD0Fixed.ParseCoordTransform(r.coordTransf);
-		// 	r.coordParsed = coordParsed;
-
-		// 	const sensorSrcParsed = PD0Fixed.ParseSensorSrc(r.sensorSrc);
-		// 	r.sensorSrcParsed = sensorSrcParsed;
-
-		// 	// -- Scale
-		// 	r.hdtAli = r.hdtAli * 0.01; // -- Degree
-		// 	r.hdtBias = r.hdtBias * 0.01; // -- Degree
-
-
-		// 	this.saveDetail(r);
-		// }
 	}
 
 	// -- PD0Variable should be 65bytes but example files are 60bytes, just disable rtcDate at the end
@@ -5036,23 +4864,6 @@ const ParserPD0 = (() => {
 
 			PD0Variable.ReadVariableLeader._toDescribeMap(dataView, offset, result, littleEndian);
 
-			/*
-			
-			r.bitResultParsed = PD0Variable.ParseBitResult(r.bitResult);
-			r.hdt = r.hdt * 0.01;
-			r.pitch = r.pitch * 0.01;
-			r.roll = r.roll * 0.01;
-			r.temp = r.temp * 0.01;
-
-			r.stdPitch = r.stdPitch * 0.1;
-			r.stdRoll = r.stdRoll * 0.1;
-			r.errStatusParsed = PD0Variable.ParseErrorStatus(r.errStatusParsed);
-
-			this.saveDetail(r);
-
-			r.tsStr = this.getTimestamp();
-			*/
-
 			return result;
 		}
 
@@ -5066,49 +4877,6 @@ const ParserPD0 = (() => {
 			const date = PD0Variable.ParseDate(result.tsYear, result.tsMonth, result.tsDay, result.tsHour, result.tsMin, result.tsSec, result.tsHundredths);
 			return date;
 		}
-
-		/*
-		parseDetail() {
-			// -- Weired files, variable leader length is only just 60
-			if (this.byteLength < this.calcLengthStruct(PD0Variable.VARIABLE_LEADER)) {
-				console.error(`Invalid length of PD0Variable, ${this.byteLength} < ${this.calcLengthStruct(PD0Variable.VARIABLE_LEADER)}`);
-				return;
-			}
-			const r = this.parse(PD0Variable.VARIABLE_LEADER, 0);
-			if (TDPD0.HID.VARIABLE.code !== r.hID) {
-				console.error(`Invalid HID ${r.hID.toString(16)}`);
-				return;
-			}
-
-			r.bitResultParsed = PD0Variable.ParseBitResult(r.bitResult);
-			r.hdt = r.hdt * 0.01;
-			r.pitch = r.pitch * 0.01;
-			r.roll = r.roll * 0.01;
-			r.temp = r.temp * 0.01;
-
-			r.stdPitch = r.stdPitch * 0.1;
-			r.stdRoll = r.stdRoll * 0.1;
-			r.errStatusParsed = PD0Variable.ParseErrorStatus(r.errStatusParsed);
-
-			this.saveDetail(r);
-
-			r.tsStr = this.getTimestamp();
-		}
-		*/
-
-		// -- RTC Date to date type
-		/*
-		getTimestamp() {
-			if (!this.parsedDetail) {
-				return false;
-			}
-
-			const t = this.parsedDetail;
-
-			const date = PD0Variable.ParseDate(t.tsYear, t.tsMonth, t.tsDay, t.tsHour, t.tsMin, t.tsSec, t.tsHundredths);
-			return date;
-		}
-		*/
 	}
 
 	class PD0Velocity {
@@ -5256,88 +5024,6 @@ const ParserPD0 = (() => {
 
 			return result;
 		}
-
-		parseDetail() {
-			// const hID = this.getUint16(0);
-			// this.addParseOffset(2);
-
-			// if (TDPD0.HID.VELOCITY.code !== hID) {
-			// 	console.error(`Invalid HID for Velocity(${TDPD0.HID.VELOCITY.code.toString(16)}) != ${hID.toString(16)}`);
-			// 	return;
-			// }
-
-			// const listCells = [];
-			// const count = (this.byteLength - 2) / PD0Velocity.SIZE_VELOCITY;
-			// for (let i = 0; i < count; i++) {
-			// 	// -- Millimeters per seconds - mm/s
-			// 	const cell = this.parseArray('I2', 4);
-
-			// 	listCells.push(cell);
-			// }
-
-			// const detail = {
-			// 	hID: hID,
-			// 	cells: listCells
-			// };
-
-			// this.saveDetail(detail);
-		}
-
-		// -- Should called with fixed leader coordination type value
-		parseVelocity2D(coordType) {
-			const md = [];
-			if (PD0Fixed.COORD[3][0] === coordType) {
-				// -- Earth coord Type
-				if (this.parsedDetail) {
-					this.parsedDetail.cells.forEach((item) => {
-						if (INVALID_VALUE !== item[0]
-							&& INVALID_VALUE !== item[1]
-							&& INVALID_VALUE !== item[2]
-							&& INVALID_VALUE !== item[3]
-						) {
-							md.push(PD0Velocity.XYMagDir(item[0], item[1]));
-						} else {
-							md.push([INVALID_VALUE, INVALID_VALUE]);
-						}
-					});
-					this.parsedDetail.md = md;
-				}
-			} else {
-				'not Supported';
-				return false;
-			}
-		}
-
-		parseMDNav(shipSpd, shipHdt) {
-			if (!this.parsedDetail || !this.parsedDetail.md) {
-				console.error(`parseMDNav should be called after md has calculated`);
-				return false;
-			}
-
-			const mdNav = [];
-			this.parsedDetail.md.forEach((item) => {
-				// -- Invalid value
-				if (INVALID_VALUE === item[0] || INVALID_VALUE === item[1]) {
-					mdNav.push([INVALID_VALUE, INVALID_VALUE]);
-					return;
-				}
-
-				// -- Zero Speed -> just same as MD
-				if (0 === shipSpd) {
-					mdNav.push(item);
-					return;
-				}
-
-				// -- Calculate
-				const apparentDirection = PD0Velocity.DegreeToRange(item[1] + 180 - shipHdt);
-				const md = PD0Velocity.TrueWind(item[0], apparentDirection, shipSpd, shipHdt);
-				md[1] = (md[1] + 180) % 360;
-				mdNav.push(md);
-			});
-
-			this.parsedDetail.mdNav = mdNav;
-		}
-
 	}
 
 	class PD0Corr {
@@ -5354,33 +5040,6 @@ const ParserPD0 = (() => {
 		]);
 
 		static SIZE_CORR = 4;
-
-		parseDetail() {
-			const hID = this.getUint16(0);
-			this.addParseOffset(2);
-
-			if (TDPD0.HID.CORR.code !== hID) {
-				console.error(`Invalid HID for Corr(${TDPD0.HID.CORR.code.toString(16)}) != ${hID.toString(16)}`);
-				return;
-			}
-
-			const listCells = [];
-			const count = (this.byteLength - 2) / PD0Corr.SIZE_CORR;
-			for (let i = 0; i < count; i++) {
-				// -- Cell Value 0 ~ 255
-				// 0 : bad
-				// 255 : perfect correlation - solid target
-				const cell = this.parseArray('U1', 4);
-				listCells.push(cell);
-			}
-
-			const detail = {
-				hID: hID,
-				cells: listCells
-			};
-
-			this.saveDetail(detail);
-		}
 
 		static ReadDepthCell = ParserA.CreateReader(PD0Corr.DEPTH_CELL);
 
@@ -5446,32 +5105,6 @@ const ParserPD0 = (() => {
 			return result;
 		}
 
-		// static SIZE_INTENSITY = 4;
-
-		// parseDetail() {
-		// 	const hID = this.getUint16(0);
-		// 	this.addParseOffset(2);
-
-		// 	if (TDPD0.HID.INTENSITY.code !== hID) {
-		// 		console.error(`Invalid HID for Intensity(${TDPD0.HID.INTENSITY.code.toString(16)}) != ${hID.toString(16)}`);
-		// 		return;
-		// 	}
-
-		// 	const listCells = [];
-		// 	const count = (this.byteLength - 2) / PD0Intensity.SIZE_INTENSITY;
-		// 	for (let i = 0; i < count; i++) {
-		// 		// -- Cell Value 0 ~ 100 percent
-		// 		const cell = this.parseArray('U1', 4);
-		// 		listCells.push(cell);
-		// 	}
-
-		// 	const detail = {
-		// 		hID: hID,
-		// 		cells: listCells
-		// 	};
-
-		// 	this.saveDetail(detail);
-		// }
 	}
 
 	class PD0PercentGood {
@@ -5511,32 +5144,6 @@ const ParserPD0 = (() => {
 			return result;
 		}
 
-		// static SIZE_PG = 4;
-
-		// parseDetail() {
-		// 	const hID = this.getUint16(0);
-		// 	this.addParseOffset(2);
-
-		// 	if (TDPD0.HID.PG.code !== hID) {
-		// 		console.error(`Invalid HID for Percent Good(${TDPD0.HID.PG.code.toString(16)}) != ${hID.toString(16)}`);
-		// 		return;
-		// 	}
-
-		// 	const listCells = [];
-		// 	const count = (this.byteLength - 2) / PD0PercentGood.SIZE_PG;
-		// 	for (let i = 0; i < count; i++) {
-		// 		// -- Cell Value 0 ~ 100 percent
-		// 		const cell = this.parseArray('U1', 4);
-		// 		listCells.push(cell);
-		// 	}
-
-		// 	const detail = {
-		// 		hID: hID,
-		// 		cells: listCells
-		// 	};
-
-		// 	this.saveDetail(detail);
-		// }
 	}
 
 	class PD0Status {
@@ -5576,34 +5183,6 @@ const ParserPD0 = (() => {
 			}
 		}
 
-		// static SIZE_STATUS = 4;
-
-		// parseDetail() {
-		// 	const hID = this.getUint16(0);
-		// 	this.addParseOffset(2);
-
-		// 	if (TDPD0.HID.STATUS.code !== hID) {
-		// 		console.error(`Invalid HID for Status(${TDPD0.HID.STATUS.code.toString(16)}) != ${hID.toString(16)}`);
-		// 		return;
-		// 	}
-
-		// 	const listCells = [];
-		// 	const count = (this.byteLength - 2) / PD0Status.SIZE_STATUS;
-		// 	for (let i = 0; i < count; i++) {
-		// 		// -- Cell Value 0 ~ 1
-		// 		// 0 : Measurement was good
-		// 		// 1 : Measurement was bad
-		// 		const cell = this.parseArray('U1', 4);
-		// 		listCells.push(cell);
-		// 	}
-
-		// 	const detail = {
-		// 		hID: hID,
-		// 		cells: listCells
-		// 	};
-
-		// 	this.saveDetail(detail);
-		// }
 	}
 
 	// -- manual is different from 2021 version to 2014 version, OS and WH is different
@@ -5686,51 +5265,6 @@ const ParserPD0 = (() => {
 			['far', 'U2'],
 		]);
 
-		// parseDetail() {
-		// 	const r = this.parse(PD0BottomTrack.BT_DATA, 0);
-
-		// 	if (TDPD0.HID.BT.code !== r.hID) {
-		// 		console.error(`Invalid HID for BottomTrack(${TDPD0.HID.BT.code.toString(16)}) != ${hID.toString(16)}`);
-		// 		return false;
-		// 	}
-
-		// 	const range = this.parseArray('U2', 4);
-		// 	const vel = this.parseArray('U2', 4);
-		// 	const corr = this.parseArray('U1', 4);
-		// 	const evalAmp = this.parseArray('U1', 4);
-		// 	const pg = this.parseArray('U1', 4); // -- pg is not in ocean surveyor manual
-		// 	const refLayer = this.parseArray('U1', 4);
-		// 	const refLayerVel = this.parseArray('U2', 4);
-		// 	const refCorr = this.parseArray('U1', 4);
-		// 	const refInt = this.parseArray('U1', 4);
-		// 	const refPG = this.parseArray('U1', 4);
-		// 	const maxDepth = this.getUint16(this.parseOffset);
-		// 	this.addParseOffset(2);
-		// 	let rssiAmp = this.parseArray('U1', 4);
-		// 	let msbRange = this.parseArray('U1', 4);
-
-		// 	// -- Scaling
-		// 	const rssiAmpDb = rssiAmp.map(i => i * 0.45); // -- dB
-		// 	msbRange = msbRange.map(i => i * 65536); // -- cm
-
-		// 	r.range = range;
-		// 	r.vel = vel;
-		// 	r.corr = corr;
-		// 	r.evalAmp = evalAmp;
-		// 	r.pg = pg;
-		// 	r.refLayer = refLayer;
-		// 	r.refLayerVel = refLayerVel;
-		// 	r.refCorr = refCorr;
-		// 	r.refInt = refInt;
-		// 	r.refPG = refPG;
-		// 	r.maxDepth = maxDepth;
-		// 	r.rssiAmp = rssiAmp;
-		// 	r.rssiAmpDb = rssiAmpDb;
-		// 	r.msbRange = msbRange;
-
-		// 	this.saveDetail(r);
-		// }
-
 		static ReadBottomTrack = ParserA.CreateReader(PD0BottomTrack.BT_DATA);
 
 		static ParseSectionDescribe(dataView, offset = 0, littleEndian = true) {
@@ -5744,23 +5278,23 @@ const ParserPD0 = (() => {
 	}
 
 	class PD0AmbientSoundProfile {
-		parseDetail() {
-			const hID = this.getUint16(0);
-			this.addParseOffset(2);
-			const rssi = this.parseArray('U1', 4);
+		// parseDetail() {
+		// 	const hID = this.getUint16(0);
+		// 	this.addParseOffset(2);
+		// 	const rssi = this.parseArray('U1', 4);
 
-			if (TDPD0.HID.ASP.code !== hID) {
-				console.error(`Invalid HID for Ambient Sound Profile(${TDPD0.HID.PG.code.toString(16)}) != ${hID.toString(16)}`);
-				return;
-			}
+		// 	if (TDPD0.HID.ASP.code !== hID) {
+		// 		console.error(`Invalid HID for Ambient Sound Profile(${TDPD0.HID.PG.code.toString(16)}) != ${hID.toString(16)}`);
+		// 		return;
+		// 	}
 
-			const r = {
-				hID: hID,
-				rssi: rssi
-			};
+		// 	const r = {
+		// 		hID: hID,
+		// 		rssi: rssi
+		// 	};
 
-			this.saveDetail(r);
-		}
+		// 	this.saveDetail(r);
+		// }
 	}
 
 	class PD0Navigation {
@@ -5863,61 +5397,6 @@ const ParserPD0 = (() => {
 
 			return result;
 		}
-
-		// parseDetail() {
-		// 	const r = this.parse(PD0Navigation.NAV_DATA, 0);
-
-		// 	if (TDPD0.HID.NAV.code !== r.hID) {
-		// 		console.error(`Invalid HID for Navigation(${TDPD0.HID.NAV.code.toString(16)}) != ${hID.toString(16)}`);
-		// 		return false;
-		// 	}
-
-		// 	const parsed = {};
-
-		// 	// -- Date
-		// 	// -- Manual says its 0.01 but Last fix says 1e-4, values are very close, should be the same unit
-		// 	const ffMS = r.utcTimeFF / 10;
-		// 	const lfMS = r.utcTimeLF / 10;
-
-		// 	const utcFF = new Date();
-		// 	utcFF.setUTCFullYear(r.utcYear, r.utcMonth - 1, r.utcDay);
-		// 	utcFF.setUTCMilliseconds(ffMS);
-
-		// 	const utcLF = new Date();
-		// 	utcLF.setUTCFullYear(r.utcYear, r.utcMonth - 1, r.utcDay);
-		// 	utcLF.setUTCMilliseconds(lfMS);
-
-		// 	parsed.utcFF = utcFF;
-		// 	parsed.utcLF = utcLF;
-
-		// 	// -- Ensemble time
-		// 	const ensDate = new Date();
-		// 	ensDate.setUTCFullYear(r.ensYear, r.ensMonth - 1, r.ensDay);
-		// 	ensDate.setUTCMilliseconds(r.ensTime / 100);
-		// 	parsed.ensDate = ensDate;
-		// 	// -- TODO Later on
-		// 	parsed.ensDateNote = 'Not verified if its utc or local based time';
-
-		// 	// -- Position
-		// 	parsed.lastPos = [PD0Navigation.BAM(r.lastLat, 32), PD0Navigation.BAM(r.lastLng, 32)];
-		// 	parsed.firstPos = [PD0Navigation.BAM(r.firstLat, 32), PD0Navigation.BAM(r.firstLng, 32)];
-		// 	parsed.avgTrackTrue = PD0Navigation.BAM(r.avgTrackTrue, 16);
-		// 	parsed.avgTrackMag = PD0Navigation.BAM(r.avgTrackMag, 16);
-		// 	parsed.DMG = PD0Navigation.BAM(r.DMG, 16);
-
-		// 	const flags = PD0Navigation.parseNavFlags(r.flags);
-		// 	parsed.flagsInvalid = flags.invalid;
-		// 	parsed.flagsValid = flags.valid;
-
-		// 	parsed.hdt = PD0Navigation.BAM(r.hdt, 16);
-		// 	parsed.pitch = PD0Navigation.BAM(r.pitch, 16);
-		// 	parsed.roll = PD0Navigation.BAM(r.roll, 16);
-
-		// 	r.parsed = parsed;
-
-		// 	// -- Lots of info should be calculated and saved in 'parsed' but ensNum is not in there!
-		// 	this.saveDetail(r);
-		// }
 	}
 
 	class PD0BinFixedAttitude {
@@ -5932,212 +5411,52 @@ const ParserPD0 = (() => {
 			['EZ', 'U8'], // [EZ] Sensor source
 		]);
 
-		parseDetail() {
-			const hID = this.getUint16(0);
-			this.addParseOffset(2);
+		// parseDetail() {
+		// 	const hID = this.getUint16(0);
+		// 	this.addParseOffset(2);
 
-			if (TDPD0.HID.BINFIXED_ATTITUDE.code !== hID) {
-				console.error(`Invalid HID for Binary Fixed Attitude(${TDPD0.HID.BINFIXED_ATTITUDE.code.toString(16)}) != ${hID.toString(16)}`);
-				return;
-			}
+		// 	if (TDPD0.HID.BINFIXED_ATTITUDE.code !== hID) {
+		// 		console.error(`Invalid HID for Binary Fixed Attitude(${TDPD0.HID.BINFIXED_ATTITUDE.code.toString(16)}) != ${hID.toString(16)}`);
+		// 		return;
+		// 	}
 
-			const strEE = this.toAsciiString(2, 9);
-			this.addParseOffset(8);
+		// 	const strEE = this.toAsciiString(2, 9);
+		// 	this.addParseOffset(8);
 
-			const r = this.parse(PD0BinFixedAttitude.BINFIXED_ATTITUDE_DATA);
-			r.hID = hID;
-			r.EE = strEE;
+		// 	const r = this.parse(PD0BinFixedAttitude.BINFIXED_ATTITUDE_DATA);
+		// 	r.hID = hID;
+		// 	r.EE = strEE;
 
-			this.saveDetail(r);
-		}
+		// 	this.saveDetail(r);
+		// }
 
 	}
 
 	class PD0BinVariableAttitude {
-		parseDetail() {
-			const hID = this.getUint16(0);
-			this.addParseOffset(2);
+		// parseDetail() {
+		// 	const hID = this.getUint16(0);
+		// 	this.addParseOffset(2);
 
-			// 3040 ~ 30FC
-			// if(TDPD0.HID.ATTITUDE.code !== hID) {
-			// 	console.error(`Invalid HID for Binary Attitude(${TDPD0.HID.ATTITUDE.code.toString(16)}) != ${hID.toString(16)}`);
-			// 	return;
-			// }
+		// 	// 3040 ~ 30FC
+		// 	// if(TDPD0.HID.ATTITUDE.code !== hID) {
+		// 	// 	console.error(`Invalid HID for Binary Attitude(${TDPD0.HID.ATTITUDE.code.toString(16)}) != ${hID.toString(16)}`);
+		// 	// 	return;
+		// 	// }
 
-			const listTypes = [];
-			for (let i = 1; i <= 8; i++) {
-				const group = this.parseArray('U2', 3 * 2);
-				listTypes.push(group);
-			}
+		// 	const listTypes = [];
+		// 	for (let i = 1; i <= 8; i++) {
+		// 		const group = this.parseArray('U2', 3 * 2);
+		// 		listTypes.push(group);
+		// 	}
 
-			const detail = {
-				hID: hID,
-				types: listTypes
-			};
+		// 	const detail = {
+		// 		hID: hID,
+		// 		types: listTypes
+		// 	};
 
-			this.saveDetail(detail);
-		}
+		// 	this.saveDetail(detail);
+		// }
 	}
-
-
-	// class TDPD0 extends EndianDataView {
-	// 	static HEADER_HID = 0x7F7F;
-
-	// 	static UNHANDLED_STR = 'Unhandled string';
-	// 	static INVALID_VALUE = -32768;
-
-	// 	static HID_BINVAR_ATTITUDE = [0x3040, 0x30FC];
-
-	// 	static HID = {
-	// 		'FIXED': { code: 0x0000, title: 'Fixed Leader', cls: PD0Fixed },
-	// 		'VARIABLE': { code: 0x0080, title: 'Variable Leader', cls: PD0Variable },
-	// 		'VELOCITY': { code: 0x0100, title: 'Veolocity Data', cls: PD0Velocity },
-	// 		'CORR': { code: 0x0200, title: 'Correlation magnitude Data', cls: PD0Corr },
-	// 		'INTENSITY': { code: 0x0300, title: 'Echo intensity Data', cls: PD0Intensity },
-	// 		'PG': { code: 0x0400, title: 'Percent good Data', cls: PD0PercentGood },
-	// 		'STATUS': { code: 0x0500, title: 'Status Data', cls: PD0Status },
-	// 		'BT': { code: 0x0600, title: 'Bottom Track Data', cls: PD0BottomTrack },
-	// 		'ASP': { code: 0x020C, title: 'Ambient Sound Profile', cls: PD0AmbientSoundProfile },
-	// 		'MICROCAT': { code: 0x0800, title: 'MicroCAT Data' },
-	// 		'NAV': { code: 0x2000, title: 'Binary Navigation Data', cls: PD0Navigation },
-	// 		'BINFIXED_ATTITUDE': { code: 0x3000, title: 'Binary Fixed Attitude Data', cls: PD0BinFixedAttitude },
-	// 		'BINVAR_ATTITUDE': { code: 0x3040, title: 'Binary Variable Attitude data', cls: PD0BinVariableAttitude },
-	// 		// -- 3040 ~ 30FC Binary Variable Attitude data format
-	// 		'UNKNOWN30E8': { code: 0x30e8, title: 'Unknown type 0x30E8' },
-	// 		'UNKNOWN30D8': { code: 0x30d8, title: 'Unknown type 0x03D8' }, // found HI-18-12 OS38
-
-	// 	}
-
-	// 	static JudgetHID(uint16) {
-	// 		for (const [k, item] of Object.entries(TDPD0.HID)) {
-	// 			if (item.code === uint16) {
-	// 				return item;
-	// 			}
-	// 		}
-
-	// 		// -- Binary Variable attitude
-	// 		if (uint16 >= TDPD0.HID_BINVAR_ATTITUDE[0] && uint16 <= TDPD0.HID_BINVAR_ATTITUDE[1]) {
-	// 			return TDPD0.HID.BINVAR_ATTITUDE;
-	// 		}
-	// 	}
-
-	// 	constructor(arrayBuffer, byteOffset, byteLength) {
-	// 		super(arrayBuffer, byteOffset, byteLength);
-
-	// 		this.setLittleEndian(true);
-
-	// 		this.parseOffset = 0;
-	// 	}
-
-	// 	// -- Splitting PD0 only, no header parsed
-	// 	parseBrief(startOffset) {
-	// 		const me = this;
-	// 		this.setParseOffset(startOffset);
-
-	// 		const length = this.buffer.byteLength;
-
-	// 		const listPD0 = [];
-	// 		const listPD0Offset = [0];
-
-	// 		// -- calculate all pd0 unit
-	// 		while (this.parseOffset < length) {
-	// 			if (!this.test7F(this.parseOffset)) {
-	// 				return false;
-	// 			}
-
-	// 			const size = this.parsePD0Size(this.parseOffset);
-	// 			this.addParseOffset(size);
-
-	// 			listPD0Offset.push(this.parseOffset);
-	// 		}
-
-	// 		// -- Create PD0 object
-	// 		let lastOffset = 0;
-	// 		listPD0Offset.forEach((offset) => {
-	// 			if (lastOffset < offset) {
-	// 				const pd0 = new PD0(me.buffer, lastOffset, offset - lastOffset);
-	// 				listPD0.push(pd0);
-	// 			}
-
-	// 			lastOffset = offset;
-	// 		});
-
-	// 		this.saveBrief(listPD0);
-	// 	}
-
-	// 	test7F(offset) {
-	// 		// -- Check the Start 2 bytes
-	// 		const hID = this.getUint16(offset);
-
-	// 		if (TDPD0.HEADER_HID !== hID) {
-	// 			console.error(`Invalid Head ID, 0x${hID.toString(16)} != 0x${TDPD0.HEADER_HID.toString(16)}`);
-	// 			return false;
-	// 		}
-
-	// 		return true;
-	// 	}
-
-	// 	parsePD0Size(startOffset) {
-	// 		const offsetSize = startOffset + 2;
-	// 		const size = this.getUint16(offsetSize);
-	// 		const sizeDP0 = size + 2;
-	// 		return sizeDP0;
-	// 	}
-
-	// 	batch20210527() {
-	// 		// -- list of pd0, which is just splitted as ensemble size
-	// 		this.parseBrief(0);
-
-	// 		// -- pd0 parse header
-	// 		console.time();
-
-	// 		for (let index = 0; index < this.parsedBrief.length; index++) {
-	// 			// for (let index = 0; index < 5; index++) {
-	// 			const pd0 = this.parsedBrief[index];
-	// 			pd0.parseBrief();
-
-	// 			pd0.parseDetail();
-
-	// 			// -- parse Magnitude / Direction at velocity instance
-	// 			pd0.parseVelocity2D();
-	// 		}
-
-	// 		console.timeEnd();
-	// 	}
-
-	// 	batchFirstLast() {
-	// 		// -- list them all
-	// 		this.parseBrief(0);
-
-	// 		const pd0First = this.parsedBrief[0];
-	// 		pd0First.parseBrief();
-	// 		pd0First.parseDetail();
-
-	// 		const pd0Last = this.parsedBrief[this.parsedBrief.length - 1];
-	// 		pd0Last.parseBrief();
-	// 		pd0Last.parseDetail();
-
-	// 		return { pd0First, pd0Last };
-	// 	}
-
-	// 	debug20210601() {
-	// 		// this.parseBrief(0);
-
-	// 		const brief = this.getBrief();
-
-	// 		for (let index = 0; index < 50; index++) {
-	// 			// for (let index = 0; index < 5; index++) {
-	// 			const pd0 = brief[index];
-
-	// 			const ts = pd0.getTimestamp();
-	// 			console.log(ts);
-
-	// 			// const md = pd0.getByHID(TDPD0.HID.VELOCITY).parsedDetail.cells[10];
-	// 			// console.log(md);
-	// 		}
-
-	// 	}
-	// }
 
 	class PD0 {
 		static HEADER_HID = 0x7F7F;
@@ -6162,21 +5481,6 @@ const ParserPD0 = (() => {
 			'UNKNOWN30D8': { code: 0x30d8, title: 'Unknown type 0x03D8' }, // found HI-18-12 OS38
 		}
 
-		// static CreateSection(type, offset, len) {
-		// 	return {
-		// 		type: type,
-		// 		offset: offset,
-		// 		len: len
-		// 	}
-		// }
-
-		// static CreateEnsemble(offset, len) {
-		// 	return {
-		// 		offset: offset,
-		// 		len: len,
-		// 	}
-		// }
-
 		static SplitEnsemble(dataView, offset, littleEndian = true) {
 			const hid = dataView.getUint16(offset, littleEndian);
 			if (PD0.HEADER_HID !== hid) {
@@ -6187,34 +5491,6 @@ const ParserPD0 = (() => {
 
 			return header;
 		}
-
-		// static ListSections = [PD0Header, PD0Fixed, PD0Variable];
-
-		// static ParseSectionOne(dataView, startOffset = 0, littleEndian = true) {
-		// 	const hid = dataView.getUint16(startOffset, littleEndian);
-
-		// 	if (PD0.HEADER_HID === hid) {
-
-		// 	} else {
-
-		// 	}
-		// }
-
-		// static ParseSection(dataView, startOffset = 0, littleEndian = true) {
-		// 	const hid = dataView.getUint16(startOffset);
-		// 	if (PD0.HEADER_HID === hid) {
-
-		// 	} else {
-
-		// 	}
-
-
-		// 	return {
-		// 		dataView: dataView,
-		// 		sectionTable: [],
-		// 		littleEndian: littleEndian,
-		// 	}
-		// }
 
 		static DescType(uint16) {
 			for (const [k, v] of Object.entries(PD0.HID)) {
@@ -6296,6 +5572,9 @@ const ParserPD0 = (() => {
 				return undefined;
 			}
 
+			const sysCfg = PD0Fixed.ParseSysCfg(dvFixed, 0, this.littleEndian);
+			this.sysCfg = sysCfg;
+
 			const coord = PD0Fixed.ParseCoord(dvFixed, 0, this.littleEndian);
 			this.coord = coord; // coordination type of this context
 			// this.coord.type
@@ -6373,12 +5652,12 @@ const ParserPD0 = (() => {
 			for (let i = 0; i < parseCount; i = i + acc) {
 				const cell = PD0Velocity.ParseCellAt(dvVelocity, i, this.littleEndian);
 				const md = PD0Velocity.ParseVelocity2DEarth(cell);
-				
-				if(INVALID_VALUE === md.n || INVALID_VALUE === md.e) {
+
+				if (INVALID_VALUE === md.n || INVALID_VALUE === md.e) {
 					md.magnitude = INVALID_VALUE;
 					md.direction = INVALID_VALUE;
 				}
-				
+
 				cells.push(cell);
 				mds.push(md);
 			}
@@ -6435,6 +5714,59 @@ const ParserPD0 = (() => {
 			this.posLast = posLast;
 
 			return true;
+		}
+
+		parseTimeStamp() {
+			const dvVar = this.variable?.dataView;
+
+			if (!dvVar) {
+				console.error(`EnsembleContext.parseTimeStamp has no variable section`);
+				return false;
+			}
+
+			const ts = PD0Variable.ParseTimeStamp(dvVar, 0, this.littleEndian);
+			this.ts = ts;
+		}
+
+		parseMeta() {
+			if (!this.posFirst) {
+				this.parsePosition();
+			}
+
+			if (!this.ts) {
+				this.parseTimeStamp();
+			}
+
+			this.meta = {
+				eq: "ADCP_" + this.sysCfg.systemStr,
+				eqid: "ADCP_" + this.sysCfg.systemStr + "_0000",
+				ts: this.ts,
+				ms: this.ts.getTime(),
+				lat: this.posFirst[0],
+				lng: this.posFirst[1],
+				lat2: this.posLast[0],
+				lng2: this.posLast[1]
+			};
+
+			return this.meta;
+		}
+
+		getMeta() {
+			return this.meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				ts: 'Variable tsYear, tsMonth, tsDay, tsHour, tsMin, tsSec, tsHundredths - parseTimestamp',
+				ts2: 'no ts2 since ensemble has one varialbe',
+				ms: 'ts.getTime()',
+				eq: 'ADCP_ + sysCfg.systemStr - ADCP_38kHz',
+				eqid: 'no serial in file, eq +_0000, just use any name',
+				lat: 'Navigation positionFirst[0] from parsePosition',
+				lng: 'Navigation positionFirst[1] from parsePosition',
+				lat2: 'Navigation positionLast[0] from parsePosition',
+				lng2: 'Navigation positionLast[1] from parsePosition',
+			}
 		}
 
 		// DivideOffsets([0, 30, 241, 500], 600, 0, true)
@@ -6512,13 +5844,65 @@ const ParserPD0 = (() => {
 			return context;
 		}
 
+		// -- whole ensembles in pod0context
 		static ParseEnsemblesContext(pd0context) {
 			pd0context.ensembles.forEach(ens => {
-				const obj = new EnsembleContext();
-				const dataView = new DataView(pd0context.dataView.buffer, ens.offset, ens.len);
-				obj.parse(dataView, ens);
-				ens.context = obj;
+				ParserEntryPD0.ParseEnsemble(pd0context, ens);
 			});
+		}
+
+		// -- just one ensemble
+		static ParseEnsembleContext(pd0context, ensemble) {
+			const obj = new EnsembleContext();
+			const dataView = new DataView(
+				pd0context.dataView.buffer,
+				ensemble.offset,
+				ensemble.len
+			);
+			obj.parse(dataView, ensemble);
+			ensemble.context = obj;
+		}
+
+		static ParseMeta(ab, littleEndian = true) {
+			const context = ParserEntryPD0.ParseEnsembles(ab, littleEndian)
+			const ens = [context.ensembles.at(0), context.ensembles.at(-1)];
+			const metas = ens.map((e) => {
+				ParserEntryPD0.ParseEnsembleContext(context, e);
+				e.context.parseMeta();
+				return e.context.getMeta();
+			});
+
+			const meta = {
+				eq: metas[0].eq,
+				eqid: metas[0].eqid,
+				lat: metas[0].lat,
+				lng: metas[0].lng,
+				lat2: metas[1].lat2,
+				lng2: metas[1].lng2,
+				ts: metas[0].ts,
+				ms: metas[0].ms,
+				ts2: metas[1].ts,
+				ms2: metas[1].ms,
+				count: context.ensembles.length
+			}
+
+			return meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				ts: 'Variable tsYear, tsMonth, tsDay, tsHour, tsMin, tsSec, tsHundredths - parseTimestamp',
+				ts2: 'no ts2 since ensemble has one varialbe',
+				ms: 'ts.getTime()',
+				eq: 'ADCP_ + sysCfg.systemStr - ADCP_38kHz',
+				eqid: 'no serial in file, eq +_0000, just use any name',
+				lat: 'Navigation positionFirst[0] from parsePosition',
+				lng: 'Navigation positionFirst[1] from parsePosition',
+				lat2: 'Navigation positionLast[0] from parsePosition',
+				lng2: 'Navigation positionLast[1] from parsePosition',
+				count: 'number of ensembles',
+				desc: 'parse meta from arrayBuffer, first and last ensemble only, ensemble context parsed with ParserEntryPD0'
+			}
 		}
 	}
 
@@ -6545,6 +5929,8 @@ const ParserPD0 = (() => {
 		GetParser: PD0.GetParser,
 		DescType: PD0.DescType,
 		ParseEnsembles: ParserEntryPD0.ParseEnsembles,
+		ParseMeta: ParserEntryPD0.ParseMeta,
+		GetMetaDesc: ParserEntryPD0.GetMetaDesc,
 
 		INVALID_VALUE: INVALID_VALUE,
 	}

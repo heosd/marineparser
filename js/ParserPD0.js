@@ -254,6 +254,12 @@ const ParserPD0 = (() => {
 
 		static ReadFixedLeader = ParserA.CreateReader(PD0Fixed.FIXED_LEADER);
 
+		static ParseSysCfg(dataView, offset, littleEndian) {
+			const value = PD0Fixed.ReadFixedLeader.sysCfg(dataView, offset, littleEndian);
+			const parsed = PD0Fixed.ParseSysConfig(value);
+			return parsed;
+		}
+
 		static ParseCoord(dataView, offset, littleEndian) {
 			const coordType = PD0Fixed.ReadFixedLeader.coordTransf(dataView, offset, littleEndian);
 			const coord = PD0Fixed.ParseCoordTransform(coordType);
@@ -1142,6 +1148,9 @@ const ParserPD0 = (() => {
 				return undefined;
 			}
 
+			const sysCfg = PD0Fixed.ParseSysCfg(dvFixed, 0, this.littleEndian);
+			this.sysCfg = sysCfg;
+
 			const coord = PD0Fixed.ParseCoord(dvFixed, 0, this.littleEndian);
 			this.coord = coord; // coordination type of this context
 			// this.coord.type
@@ -1219,12 +1228,12 @@ const ParserPD0 = (() => {
 			for (let i = 0; i < parseCount; i = i + acc) {
 				const cell = PD0Velocity.ParseCellAt(dvVelocity, i, this.littleEndian);
 				const md = PD0Velocity.ParseVelocity2DEarth(cell);
-				
-				if(INVALID_VALUE === md.n || INVALID_VALUE === md.e) {
+
+				if (INVALID_VALUE === md.n || INVALID_VALUE === md.e) {
 					md.magnitude = INVALID_VALUE;
 					md.direction = INVALID_VALUE;
 				}
-				
+
 				cells.push(cell);
 				mds.push(md);
 			}
@@ -1281,6 +1290,59 @@ const ParserPD0 = (() => {
 			this.posLast = posLast;
 
 			return true;
+		}
+
+		parseTimeStamp() {
+			const dvVar = this.variable?.dataView;
+
+			if (!dvVar) {
+				console.error(`EnsembleContext.parseTimeStamp has no variable section`);
+				return false;
+			}
+
+			const ts = PD0Variable.ParseTimeStamp(dvVar, 0, this.littleEndian);
+			this.ts = ts;
+		}
+
+		parseMeta() {
+			if (!this.posFirst) {
+				this.parsePosition();
+			}
+
+			if (!this.ts) {
+				this.parseTimeStamp();
+			}
+
+			this.meta = {
+				eq: "ADCP_" + this.sysCfg.systemStr,
+				eqid: "ADCP_" + this.sysCfg.systemStr + "_0000",
+				ts: this.ts,
+				ms: this.ts.getTime(),
+				lat: this.posFirst[0],
+				lng: this.posFirst[1],
+				lat2: this.posLast[0],
+				lng2: this.posLast[1]
+			};
+
+			return this.meta;
+		}
+
+		getMeta() {
+			return this.meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				ts: 'Variable tsYear, tsMonth, tsDay, tsHour, tsMin, tsSec, tsHundredths - parseTimestamp',
+				ts2: 'no ts2 since ensemble has one varialbe',
+				ms: 'ts.getTime()',
+				eq: 'ADCP_ + sysCfg.systemStr - ADCP_38kHz',
+				eqid: 'no serial in file, eq +_0000, just use any name',
+				lat: 'Navigation positionFirst[0] from parsePosition',
+				lng: 'Navigation positionFirst[1] from parsePosition',
+				lat2: 'Navigation positionLast[0] from parsePosition',
+				lng2: 'Navigation positionLast[1] from parsePosition',
+			}
 		}
 
 		// DivideOffsets([0, 30, 241, 500], 600, 0, true)
@@ -1358,13 +1420,65 @@ const ParserPD0 = (() => {
 			return context;
 		}
 
+		// -- whole ensembles in pod0context
 		static ParseEnsemblesContext(pd0context) {
 			pd0context.ensembles.forEach(ens => {
-				const obj = new EnsembleContext();
-				const dataView = new DataView(pd0context.dataView.buffer, ens.offset, ens.len);
-				obj.parse(dataView, ens);
-				ens.context = obj;
+				ParserEntryPD0.ParseEnsemble(pd0context, ens);
 			});
+		}
+
+		// -- just one ensemble
+		static ParseEnsembleContext(pd0context, ensemble) {
+			const obj = new EnsembleContext();
+			const dataView = new DataView(
+				pd0context.dataView.buffer,
+				ensemble.offset,
+				ensemble.len
+			);
+			obj.parse(dataView, ensemble);
+			ensemble.context = obj;
+		}
+
+		static ParseMeta(ab, littleEndian = true) {
+			const context = ParserEntryPD0.ParseEnsembles(ab, littleEndian)
+			const ens = [context.ensembles.at(0), context.ensembles.at(-1)];
+			const metas = ens.map((e) => {
+				ParserEntryPD0.ParseEnsembleContext(context, e);
+				e.context.parseMeta();
+				return e.context.getMeta();
+			});
+
+			const meta = {
+				eq: metas[0].eq,
+				eqid: metas[0].eqid,
+				lat: metas[0].lat,
+				lng: metas[0].lng,
+				lat2: metas[1].lat2,
+				lng2: metas[1].lng2,
+				ts: metas[0].ts,
+				ms: metas[0].ms,
+				ts2: metas[1].ts,
+				ms2: metas[1].ms,
+				count: context.ensembles.length
+			}
+
+			return meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				ts: 'Variable tsYear, tsMonth, tsDay, tsHour, tsMin, tsSec, tsHundredths - parseTimestamp',
+				ts2: 'no ts2 since ensemble has one varialbe',
+				ms: 'ts.getTime()',
+				eq: 'ADCP_ + sysCfg.systemStr - ADCP_38kHz',
+				eqid: 'no serial in file, eq +_0000, just use any name',
+				lat: 'Navigation positionFirst[0] from parsePosition',
+				lng: 'Navigation positionFirst[1] from parsePosition',
+				lat2: 'Navigation positionLast[0] from parsePosition',
+				lng2: 'Navigation positionLast[1] from parsePosition',
+				count: 'number of ensembles',
+				desc: 'parse meta from arrayBuffer, first and last ensemble only, ensemble context parsed with ParserEntryPD0'
+			}
 		}
 	}
 
@@ -1391,6 +1505,8 @@ const ParserPD0 = (() => {
 		GetParser: PD0.GetParser,
 		DescType: PD0.DescType,
 		ParseEnsembles: ParserEntryPD0.ParseEnsembles,
+		ParseMeta: ParserEntryPD0.ParseMeta,
+		GetMetaDesc: ParserEntryPD0.GetMetaDesc,
 
 		INVALID_VALUE: INVALID_VALUE,
 	}
