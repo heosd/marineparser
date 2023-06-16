@@ -1423,7 +1423,7 @@ const ParserPD0 = (() => {
 		// -- whole ensembles in pod0context
 		static ParseEnsemblesContext(pd0context) {
 			pd0context.ensembles.forEach(ens => {
-				ParserEntryPD0.ParseEnsemble(pd0context, ens);
+				ParserEntryPD0.ParseEnsembleContext(pd0context, ens);
 			});
 		}
 
