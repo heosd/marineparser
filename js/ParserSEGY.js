@@ -521,6 +521,13 @@ const ParserSEGY = (() => {
 
 			return result;
 		}
+
+		static ParseMeta(ab) {
+			const context = new ParserContextBasic_SEGY();
+			context.load(ab);
+			context.parseMeta();
+			return context.getMeta();
+		}
 	}
 
 	class ParserContextBasic_SEGY {
@@ -566,6 +573,50 @@ const ParserSEGY = (() => {
 			this.sections = [];
 			this.traces = [];
 		}
+
+		parseMeta() {
+			const meta = {};
+
+			const sectionTraces = this.sections.filter(d => SEGYTrace.IsMyType(d.type));
+			const traces = [sectionTraces[0], sectionTraces.at(-1)];
+
+			const results = traces.map(s => SEGYTrace.ParseSection(this.dataView, s.offset, this.isLE, this.sampleCode));
+			meta.ts = results[0][3];
+			meta.ms = meta.ts.getTime();
+			meta.lat = results[0][5];
+			meta.lng = results[0][6];
+			meta.ts2 = results[1][3];
+			meta.ms2 = meta.ts2.getTime();
+			meta.lat2 = results[1][5];
+			meta.lng2 = results[1][6];
+			meta.desc = `interval : ${results[0][2]}, number samples : ${results[0][1]}`;
+			meta.count = sectionTraces.length;
+			meta.bytes = this.dataView.byteLength;
+
+			this.meta = meta;
+
+			return this.meta;
+		}
+
+		getMeta() {
+			return this.meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				ts: 'trace[0].ts',
+				ms: 'trace[0].ts.getTime()',
+				lat: 'trace[0].lat',
+				lng: 'trace[0].lng',
+				ts2: 'trace[-1].ts',
+				ms2: 'trace[-1].ts.getTime()',
+				lat2: 'trace[-1].lat',
+				lng2: 'trace[-1].lng',
+				desc: 'trace[0].interval, trace[0].numSample',
+				count: 'trace.length',
+				bytes: 'arrayBuffer.byteLength'
+			}
+		}
 	}
 
 
@@ -605,6 +656,7 @@ const ParserSEGY = (() => {
 
 		// -- Parser Entry
 		ParserTest: ParserTest_SEGY,
+		ParseMeta: ParserTest_SEGY.ParseMeta
 	}
 
 })();

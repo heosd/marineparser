@@ -1459,7 +1459,8 @@ const ParserPD0 = (() => {
 				ms: metas[0].ms,
 				ts2: metas[1].ts,
 				ms2: metas[1].ms,
-				count: context.ensembles.length
+				count: context.ensembles.length,
+				bytes: ab.byteLength
 			}
 
 			return meta;
@@ -1477,7 +1478,8 @@ const ParserPD0 = (() => {
 				lat2: 'Navigation positionLast[0] from parsePosition',
 				lng2: 'Navigation positionLast[1] from parsePosition',
 				count: 'number of ensembles',
-				desc: 'parse meta from arrayBuffer, first and last ensemble only, ensemble context parsed with ParserEntryPD0'
+				desc: 'parse meta from arrayBuffer, first and last ensemble only, ensemble context parsed with ParserEntryPD0',
+				bytes: 'arrayBuffer.byteLength'
 			}
 		}
 	}

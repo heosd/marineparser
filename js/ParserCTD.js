@@ -29,26 +29,31 @@ const ParserCTD = (() => {
 	class CTDFileList {
 		constructor() {
 			this.listFiles = [];
+			this.listURLs = [];
 			this.mapGroup = {};
 		}
 
 		addFile(file) {
-			const name = file.name.match(/^(.*)\.([^.]*)$/i);
-			if (name) {
-				const filename = name[1];
-				const fnLower = filename.toLowerCase();
-				const ext = name[2];
-				const lower = ext.toLowerCase();
+			const m = CTDFileList.MatchFileName(file.name);
+			if (m && true === m.found) {
+				this.listFiles.push(file);
 
-				const found = ['hex', 'bl', 'hdr', 'xmlcon'].findIndex(rawExts => lower === rawExts);
-				if (-1 !== found) {
-					this.listFiles.push(file);
-					if (!this.mapGroup.hasOwnProperty(fnLower)) {
-						this.mapGroup[fnLower] = new CTDGroup();
-					}
-
-					this.mapGroup[fnLower].addFile(file);
+				if (!this.mapGroup.hasOwnProperty(m.filenameLower)) {
+					this.mapGroup[m.filenameLower] = new CTDGroup();
 				}
+			}
+		}
+
+		addURL(url) {
+			const m = CTDFileList.MatchFileName(url);
+			if (m && true === m.found) {
+				this.listURLs.push(url);
+
+				if (!this.mapGroup.hasOwnProperty(m.filenameLower)) {
+					this.mapGroup[m.filenameLower] = new CTDGroup();
+				}
+
+				this.mapGroup[m.filenameLower].addURL(url);
 			}
 		}
 
@@ -67,6 +72,27 @@ const ParserCTD = (() => {
 		getGroups() {
 			return Object.values(this.mapGroup);
 		}
+
+		static MatchFileName(name) {
+			const m = name.match(/([^/]*)\.([^.]*)$/i);
+			if (m) {
+				const filename = m[1];
+				const filenameLower = filename.toLowerCase();
+				const ext = m[2];
+				const extLower = ext.toLowerCase();
+
+				const found = ['hex', 'bl', 'hdr', 'xmlcon'].findIndex(rawExts => extLower === rawExts);
+				return {
+					filename: filename,
+					filenameLower: filenameLower,
+					ext: ext,
+					extLower: extLower,
+					found: -1 !== found
+				}
+			}
+
+			return undefined;
+		}
 	}
 
 	class CTDGroup {
@@ -76,6 +102,13 @@ const ParserCTD = (() => {
 				hdr: undefined,
 				hex: undefined,
 				xmlcon: undefined
+			}
+
+			this.urls = {
+				bl: undefined,
+				hdr: undefined,
+				hex: undefined,
+				xmlcon: undefined,
 			}
 
 			this.instance = {
@@ -89,18 +122,18 @@ const ParserCTD = (() => {
 		}
 
 		addFile(file) {
-			const name = file.name.match(/^(.*)\.([^.]*)$/i);
-			if (name) {
-				const filename = name[1];
-				const ext = name[2];
-				const lower = ext.toLowerCase();
+			const m = CTDFileList.MatchFileName(file.name);
+			if (m && true === m.found) {
+				this.files[m.extLower] = file;
+				this.name = m.filename;
+			}
+		}
 
-				const found = ['hex', 'bl', 'hdr', 'xmlcon'].findIndex(rawExts => lower === rawExts);
-				if (-1 !== found) {
-					this.files[lower] = file;
-
-					this.name = filename;
-				}
+		addURL(url) {
+			const m = CTDFileList.MatchFileName(url);
+			if (m && true === m.found) {
+				this.urls[m.extLower] = url;
+				this.name = m.filename;
 			}
 		}
 
@@ -142,6 +175,40 @@ const ParserCTD = (() => {
 			}
 		}
 
+		async parseURLs() {
+			if (this.urls.hex) {
+				const hex = new CTDHex();
+				this.instance.hex = hex;
+				hex.setParent(this);
+
+				await hex.setFileURL(this.urls.hex);
+			}
+
+			if (this.urls.xmlcon) {
+				const xmlcon = new CTDXMLCON();
+				this.instance.xmlcon = xmlcon;
+				xmlcon.setParent(this);
+
+				await xmlcon.setFileURL(this.urls.xmlcon);
+			}
+
+			if (this.urls.hdr) {
+				const hdr = new CTDHDR();
+				this.instance.hdr = hdr;
+				hdr.setParent(this);
+
+				await hdr.setFileURL(this.urls.hdr);
+			}
+
+			if (this.urls.bl) {
+				const bl = new CTDBL();
+				this.instance.bl = bl;
+				bl.setParent(this);
+
+				await bl.setFileURL(this.urls.bl);
+			}
+		}
+
 		unload() {
 			// -- call each instance unload
 		}
@@ -157,6 +224,62 @@ const ParserCTD = (() => {
 		}
 		getBl() {
 			return this.instance.bl;
+		}
+
+		parseMeta() {
+			const meta = {};
+			const metaDesc = {};
+
+			const hex = this.getHex();
+			const hdr = this.getHdr();
+			const xmlcon = this.getXmlcon();
+
+			if (hex) {
+				const metaHex = hex.parseMeta();
+				const metaDescHex = CTDHex.GetMetaDesc();
+				['lat', 'lng', 'ts', 'ms', 'count', 'desc', 'bytes'].forEach(k => {
+					meta[k] = metaHex[k];
+					metaDesc[k] = metaDescHex[k];
+				});
+			} else if (hdr) {
+				const metaHDR = hdr.parseMeta();
+				const metaDescHDR = CTDHDR.GetMetaDesc();
+				['lat', 'lng', 'ts', 'ms', 'bytes'].forEach(k => {
+					meta[k] = metaHDR[k];
+					metaDesc[k] = metaDescHDR[k];
+				});
+			}
+
+			if (xmlcon) {
+				const metaXML = xmlcon.parseMeta();
+				const metaDescXML = CTDXMLCON.GetMetaDesc();
+				['eq', 'eqid'].forEach(k => {
+					meta[k] = metaXML[k];
+					metaDesc[k] = metaDescXML[k];
+				});
+			}
+
+			this.meta = meta;
+			this.metaDesc = metaDesc;
+
+			return meta;
+		}
+
+		getMeta() {
+			return this.meta;
+		}
+
+		// -- you can get metaDesc more specific
+		static GetMetaDesc() {
+			return {
+				lat: 'HEX, HDR string NMEA Latitude = lat',
+				lng: 'HEX, HDR string NMEA Longitude = lng',
+				ts: 'HEX, HDR string NMEA UTC (Time) = ts',
+				ms: 'HEX, HDR string NMEA UTC (Time) = ts to ms',
+				count: 'HEX length of line',
+				desc: 'HEX getParsingDescription()',
+				bytes: 'HEX, HDR content-length or file.size'
+			}
 		}
 	}
 
@@ -264,14 +387,17 @@ const ParserCTD = (() => {
 		}
 
 		async setFile(file) {
-			return new Promise((resolve, reject) => {
-				const reader = new FileReader();
-				reader.onloadend = () => {
-					this.setDataSource(reader.result)
-					resolve();
-				};
-				reader.readAsText(file);
-			});
+			const text = await file.text();
+			this.setDataSource(text);
+			this.bytes = file.size;
+		}
+
+		async setFileURL(url) {
+			const r = await fetch(url);
+			const bytes = r.headers.get('content-length');
+			const text = await r.text();
+			this.setDataSource(text);
+			this.bytes = parseInt(bytes);
 		}
 
 		setDataSource(str) {
@@ -282,6 +408,38 @@ const ParserCTD = (() => {
 
 		getParsedHDR() {
 			return this.parsedHDR;
+		}
+
+		parseMeta() {
+			if (!this.parsedHDR) {
+				console.error('hdr should parsed before');
+				return;
+			}
+
+			const meta = {};
+
+			meta.lat = this.parsedHDR.lat;
+			meta.lng = this.parsedHDR.lng;
+			meta.ts = this.parsedHDR.utc;
+			meta.ms = meta.ts.getTime();
+			meta.bytes = this.bytes;
+
+			this.meta = meta;
+			return meta;
+		}
+
+		getMeta() {
+			return this.meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				lat: 'HDR string NMEA Latitude = lat',
+				lng: 'HDR string NMEA Longitude = lng',
+				ts: 'HDR string NMEA UTC (Time) = ts',
+				ms: 'HDR string NMEA UTC (Time) = ts to ms',
+				bytes: 'HDR content-length header or file.size'
+			}
 		}
 	}
 
@@ -352,14 +510,17 @@ const ParserCTD = (() => {
 		}
 
 		async setFile(file) {
-			return new Promise((resolve, reject) => {
-				const reader = new FileReader();
-				reader.onloadend = () => {
-					this.setDataSource(reader.result)
-					resolve();
-				};
-				reader.readAsText(file);
-			});
+			const text = await file.text();
+			this.setDataSource(text);
+			this.bytes = file.size;
+		}
+
+		async setFileURL(url) {
+			const r = await fetch(url);
+			const bytes = r.headers.get('content-length');
+			const text = await r.text();
+			this.setDataSource(text);
+			this.bytes = parseInt(bytes);
 		}
 
 		setDataSource(str) {
@@ -406,9 +567,18 @@ const ParserCTD = (() => {
 
 		async setFile(file) {
 			const text = await file.text();
-
 			this.setDataSource(text);
+			this.bytes = file.size;
 		}
+
+		async setFileURL(url) {
+			const r = await fetch(url);
+			const bytes = r.headers.get('content-length');
+			const text = await r.text();
+			this.setDataSource(text);
+			this.bytes = parseInt(bytes);
+		}
+
 
 		// -- this holds raw data as string, not parsed
 		setDataSource(str) {
@@ -795,6 +965,46 @@ const ParserCTD = (() => {
 			this.body = undefined;
 			// this.dataSource = undefined;
 		}
+
+		parseMeta() {
+			if (!this.parsedHDR) {
+				console.error('hdr should parsed before');
+				return;
+			}
+
+			const parseDesc = this.getParsingDescription();
+			const descStr = Object.keys(parseDesc).map(k => `${k}: ${parseDesc[k]}`).join(', ');
+
+			const meta = {};
+
+			meta.lat = this.parsedHDR.lat;
+			meta.lng = this.parsedHDR.lng;
+			meta.ts = this.parsedHDR.utc;
+			meta.ms = meta.ts.getTime();
+			meta.count = this.getLength();
+			meta.desc = descStr;
+			meta.bytes = this.bytes;
+
+			this.meta = meta;
+			return meta;
+		}
+
+		getMeta() {
+			return this.meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				lat: 'HEX HDR string NMEA Latitude = lat',
+				lng: 'HEX HDR string NMEA Longitude = lng',
+				ts: 'HEX HDR string NMEA UTC (Time) = ts',
+				ms: 'HEX HDR string NMEA UTC (Time) = ts to ms',
+				count: 'HEX getLength()',
+				desc: 'HEX getParsingDescription()',
+				bytes: 'HEX content-length header or file.size'
+			}
+		}
+
 	}
 
 	class CTDXMLCON extends CTDChild {
@@ -1075,14 +1285,17 @@ const ParserCTD = (() => {
 		}
 
 		async setFile(file) {
-			return new Promise((resolve, reject) => {
-				const reader = new FileReader();
-				reader.onloadend = () => {
-					this.setDataSource(reader.result)
-					resolve();
-				};
-				reader.readAsText(file);
-			});
+			const text = await file.text();
+			this.setDataSource(text);
+			this.bytes = file.size;
+		}
+
+		async setFileURL(url) {
+			const r = await fetch(url);
+			const bytes = r.headers.get('content-length');
+			const text = await r.text();
+			this.setDataSource(text);
+			this.bytes = parseInt(bytes);
 		}
 
 		setDataSource(dataSource) {
@@ -1123,6 +1336,36 @@ const ParserCTD = (() => {
 			const hex = this.getHex();
 			if (hex) {
 				hex.updateParsingDescription();
+			}
+		}
+
+		parseMeta() {
+			if (!this.dataSource) {
+				console.error('Required dataSource json from xml');
+				return false;
+			}
+
+			const meta = {};
+			const inst = this.dataSource.SBE_InstrumentConfiguration.Instrument;
+
+			meta.eq = inst.Name['#text'];
+			const pressure = inst.SensorArray.Sensor.find(d => '45' === d['@attributes'].SensorID);
+			meta.eqid = pressure.PressureSensor.SerialNumber['#text'];
+			meta.bytes = this.bytes;
+
+			this.meta = meta;
+			return this.meta;
+		}
+
+		getMeta() {
+			return this.meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				eq: 'XMLCON.Instrument.Name',
+				eqid: 'XMLCON.Instrument.SensorArray.Sensor.SensorID == 45 serial',
+				bytes: 'XMLCON content-length header or file.size'
 			}
 		}
 

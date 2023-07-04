@@ -966,7 +966,7 @@ const ParserEM = (() => {
 			const body = [];
 
 			let readBody = EMDepthDatagram.ReadBody;
-			if(120 === model || 300 === model) {
+			if (120 === model || 300 === model) {
 				readBody = EMDepthDatagram.ReadBodySign;
 			}
 
@@ -993,7 +993,7 @@ const ParserEM = (() => {
 			let seq = EMDepthDatagram.ReadHead._size;
 
 			let readBody = EMDepthDatagram.ReadBody;
-			if(120 === model || 300 === model) {
+			if (120 === model || 300 === model) {
 				readBody = EMDepthDatagram.ReadBodySign;
 			}
 
@@ -1723,6 +1723,7 @@ const ParserEM = (() => {
 			this.isLE = littleEndian;
 
 			this.typeXYZ = this.judgeXYZ();
+			this.bytes = this.mb.byteLength;
 		}
 
 		judgeXYZ() {
@@ -1766,7 +1767,7 @@ const ParserEM = (() => {
 				if (0x44 === s.type) { // 0x44 Depth datagram
 					const r = cls.ParseSectionMinimum(this.mb, s.offset, s.length);
 					result.push(r);
-				} else if(0x58 === s.type) {
+				} else if (0x58 === s.type) {
 					const r = cls.ParseSectionMinimum(this.mb, s.offset, s.length);
 					result.push(r);
 				}
@@ -2024,6 +2025,82 @@ const ParserEM = (() => {
 			return instance;
 		}
 
+		parseMeta() {
+			const meta = {};
+			const positions = this.parseMetaPosition();
+			meta.ts = positions[0].ts;
+			meta.ms = positions[0].ts.getTime();
+			meta.lat = positions[0].lat;
+			meta.lng = positions[0].lng;
+			meta.ts2 = positions[1].ts;
+			meta.ms2 = positions[1].ts.getTime();
+			meta.lat2 = positions[1].lat;
+			meta.lng2 = positions[1].lng;
+
+			const runtime = this.parseMetaFirstRuntime();
+			meta.eq = runtime.eq;
+			meta.eqid = runtime.eqid;
+
+			meta.count = this.parseMetaDepthSectionCount();
+			meta.bytes = this.bytes;
+
+			this.meta = meta;
+			return meta;
+		}
+
+		// -- to count ping, xyz or depth datagram
+		parseMetaDepthSectionCount() {
+			return this.sections.filter(d => EMXYZ88.IsMyType(d.type) || EMDepthDatagram.IsMyType(d.type)).length;
+		}
+
+		parseMetaPosition() {
+			const cls = EMPosition;
+			const positions = this.sections.filter(d => cls.IsMyType(d.type));
+			const parsedPositions = [positions[0], positions.at(-1)].map(s => cls.ParseSectionMinimum(this.mb, s.offset, this.isLE));
+			const meta = parsedPositions.map(pos => {
+				const obj = {
+					ts: ParseDateTime(pos[0], pos[1]),
+					lat: pos[2],
+					lng: pos[3],
+				}
+				return obj;
+			});
+
+			return meta;
+		}
+
+		parseMetaFirstRuntime() {
+			const cls = EMRuntimeParam;
+			const runtime = this.sections.find(d => cls.IsMyType(d.type));
+			const model = cls.ReadRuntime.model(this.mb, runtime.offset, this.isLE);
+			const serial = cls.ReadRuntime.serial(this.mb, runtime.offset, this.isLE);
+
+			return {
+				eq: 'EM' + model,
+				eqid: String(serial)
+			}
+		}
+
+		getMeta() {
+			return this.meta;
+		}
+
+		static GetMetaDesc() {
+			return {
+				eq: 'EM + runtime[0].model',
+				eqid: 'runtime[0].serial',
+				ts: 'position[0].ts',
+				ts2: 'position.at(-1).ts',
+				ms: 'ts.getTime()',
+				ms2: 'ts2.getTime()',
+				lat: 'position[0].lat',
+				lng: 'position[0].lng',
+				lat2: 'position[1].lat',
+				lng2: 'position[1].lng',
+				count: 'number of xyz88 or depth datagram',
+				bytes: 'context.bytes from dataView.byteLength'
+			}
+		}
 	}
 
 
@@ -2059,6 +2136,16 @@ const ParserEM = (() => {
 				sectionTable: sectionTable,
 				littleEndian: littleEndian,
 			}
+		}
+
+		static ParseMeta(ab) {
+			const loaded = ParserTest_EM.LoadArrayBuffer(ab);
+
+			const context = new ParserContextBasic_EM();
+			context.load(loaded.dataView, loaded.sectionTable, loaded.littleEndian);
+			context.parseMeta();
+
+			return context.getMeta();
 		}
 	}
 
@@ -2104,6 +2191,7 @@ const ParserEM = (() => {
 
 		// -- Parser Entry
 		ParserTest: ParserTest_EM,
+		ParseMeta: ParserTest_EM.ParseMeta
 
 	};
 })();
