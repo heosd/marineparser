@@ -4,9 +4,9 @@ const app = (() => {
         window.ParserCTD = MarineParser.ParserCTD;
     }
 
-    const fileList = new ParserCTD.CTDFileList();
-
     async function loadTest() {
+        const fileList = new ParserCTD.CTDFileList();
+
         const list = [
             '/raw/ctd/COD_OM01_01.bl',
             '/raw/ctd/COD_OM01_01.hdr',
@@ -39,6 +39,8 @@ const app = (() => {
     }
 
     async function onChangeFile(input) {
+        const fileList = new ParserCTD.CTDFileList();
+
         const files = input.files;
         for (let i = 0; i < files.length; i++) {
             const f = files[i];
@@ -46,7 +48,7 @@ const app = (() => {
         }
 
         fileList.getGroups().forEach(async (d) => {
-            await d.parseURLs();
+            await d.parse();
             const meta = d.parseMeta();
             console.log(meta);
         });

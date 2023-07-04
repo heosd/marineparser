@@ -41,6 +41,8 @@ const ParserCTD = (() => {
 				if (!this.mapGroup.hasOwnProperty(m.filenameLower)) {
 					this.mapGroup[m.filenameLower] = new CTDGroup();
 				}
+
+				this.mapGroup[m.filenameLower].addFile(file);
 			}
 		}
 
