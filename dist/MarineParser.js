@@ -3559,6 +3559,7 @@ const ParserCTD = (() => {
 			const lat = str.match(/NMEA Latitude = (.*)$/m);
 			const lng = str.match(/NMEA Longitude = (.*)$/m);
 			const utc = str.match(/NMEA UTC \(Time\) = (.*)$/m);
+			const utcSystem = str.match(/System UTC = (.*)$/m);
 			const scanAvg = str.match(/Number of Scans Averaged by the Deck Unit = (.*)$/m);
 
 			const obj = {
@@ -3566,6 +3567,7 @@ const ParserCTD = (() => {
 				lat: lat,
 				lng: lng,
 				utc: utc,
+				utcSystem: utcSystem,
 				scanAvg: scanAvg
 			}
 
@@ -3606,6 +3608,15 @@ const ParserCTD = (() => {
 				utc = new Date(utc.getTime() + (utc.getTimezoneOffset() * 60 * 1000 * -1));
 				obj.nmeaUTC = dateStr;
 				obj.utc = utc;
+			}
+
+			if (obj.utcSystem) {
+				const dateStr = obj.utcSystem[1];
+				let utc = new Date(dateStr);
+				// -- add my time zone
+				utc = new Date(utc.getTime() + (utc.getTimezoneOffset() * 60 * 1000 * -1));
+				obj.systemUTC = dateStr;
+				obj.utc = utc; // use same obj.utc as nmea read
 			}
 
 			// -- if its 1, its 24hz scans. otherwise I dont know
@@ -3651,7 +3662,7 @@ const ParserCTD = (() => {
 			meta.lat = this.parsedHDR.lat;
 			meta.lng = this.parsedHDR.lng;
 			meta.ts = this.parsedHDR.utc;
-			meta.ms = meta.ts.getTime();
+			meta.ms = meta.ts?.getTime();
 			meta.bytes = this.bytes;
 
 			this.meta = meta;
@@ -4231,7 +4242,7 @@ const ParserCTD = (() => {
 			meta.lat = this.parsedHDR.lat;
 			meta.lng = this.parsedHDR.lng;
 			meta.ts = this.parsedHDR.utc;
-			meta.ms = meta.ts.getTime();
+			meta.ms = meta.ts?.getTime();
 			meta.count = this.getLength();
 			meta.desc = descStr;
 			meta.bytes = this.bytes;

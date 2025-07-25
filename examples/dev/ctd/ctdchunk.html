@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chunk reader</title>
+</head>
+
+<body>
+
+    <input type="file" id="file" onchange="onChangeFile(this)">
+    <script>
+
+        async function onChangeFile(e) {
+            const file = e.files[0];
+            const blob = file.slice(0, 64 * 1024);
+
+            console.time('a1');
+            const t1 = await blob.text();
+            console.timeEnd('a1');
+
+            console.time('a2');
+            const t2 = await file.text();
+            console.timeEnd('a2');
+        }
+
+        function chunkTest() {
+            var chunkedUrl = '/raw/ctd/COD_OM01_01.hex';
+            fetch(chunkedUrl)
+                .then(processChunkedResponse)
+                .then(onChunkedResponseComplete)
+                .catch(onChunkedResponseError)
+                ;
+
+            function onChunkedResponseComplete(result) {
+                console.log('all done!', result)
+            }
+
+            function onChunkedResponseError(err) {
+                console.error(err)
+            }
+
+            function processChunkedResponse(response) {
+                var text = '';
+                var reader = response.body.getReader()
+                var decoder = new TextDecoder();
+
+                return readChunk();
+
+                function readChunk() {
+                    return reader.read().then(appendChunks);
+                }
+
+                function appendChunks(result) {
+                    var chunk = decoder.decode(result.value || new Uint8Array, { stream: !result.done });
+                    console.log('got chunk of', chunk.length, 'bytes')
+                    text += chunk;
+                    console.log('text so far is', text.length, 'bytes\n');
+                    if (result.done) {
+                        console.log('returning')
+                        return text;
+                    } else {
+                        console.log('recursing')
+                        return readChunk();
+                    }
+                }
+            }
+
+        }
+
+        async function doit() {
+            var chunkedUrl = '/raw/ctd/COD_OM01_01.hex';
+            const response = await fetch(chunkedUrl);
+            const reader = response.body.getReader()
+            console.log(reader);
+            const decoder = new TextDecoder()
+            let result = await reader.read();
+            console.log(result);
+
+            // while (!result.done) {
+            //     const text = decoder.decode(result.value)
+            //     console.log("chunk is", text)
+            //     result = await reader.read()
+            // }
+        }
+
+        async function readablestream() {
+            var chunkedUrl = '/raw/ctd/COD_OM01_01.hex';
+            const response = await fetch(chunkedUrl);
+
+            const reader = response.body.getReader({ mode: "byob" });
+            let buffer = new ArrayBuffer(4000);
+            readStream(reader);
+
+            let result = '';
+            const logConsumer = console.log;
+
+            function readStream(reader) {
+                let bytesReceived = 0;
+                let offset = 0;
+
+                while (offset < buffer.byteLength) {
+                    // read() returns a promise that resolves when a value has been received
+                    reader
+                        .read(new Uint8Array(buffer, offset, buffer.byteLength - offset))
+                        .then(function processText({ done, value }) {
+                            // Result objects contain two properties:
+                            // done  - true if the stream has already given all its data.
+                            // value - some data. Always undefined when done is true.
+
+                            if (done) {
+                                logConsumer(`readStream() complete. Total bytes: ${bytesReceived}`);
+                                return;
+                            }
+
+                            buffer = value.buffer;
+                            offset += value.byteLength;
+                            bytesReceived += value.byteLength;
+
+                            logConsumer(`Read ${bytesReceived} bytes: ${value}`);
+                            result += value;
+
+                            // Read some more, and call this function again
+                            return reader
+                                .read(new Uint8Array(buffer, offset, buffer.byteLength - offset))
+                                .then(processText);
+                        });
+                }
+            }
+        }
+
+        // readablestream();
+
+        async function readablestream2() {
+            var chunkedUrl = '/raw/ctd/COD_OM01_01.hex';
+            const chunkSize = 10 * 1024;
+            const response = await fetch(chunkedUrl, {
+                headers: {
+                    range: `bytes=0-${chunkSize}`
+                }
+            });
+
+            const text = await response.text();
+            console.log(text);
+
+            // const reader = response.body.getReader({ mode: "byob" });
+
+            // let startingAB = new ArrayBuffer(1024);
+            // const buffer = await readInto(startingAB);
+            // console.log("The first 1024 bytes: ", buffer);
+
+            // async function readInto(buffer) {
+            //     let offset = 0;
+
+            //     const { done, value: view } =
+            //         await reader.read(new Uint8Array(buffer, offset, buffer.byteLength - offset));
+            //     console.log(done, view);
+            //     // buffer = view.buffer;
+
+            //     // console.log(rrr);
+
+            //     return buffer;
+            // }
+        }
+
+        readablestream2();
+
+
+
+    </script>
+</body>
+
+</html>

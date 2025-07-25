@@ -177,6 +177,24 @@ const ParserCTD = (() => {
 			}
 		}
 
+		async parseChunk() {
+			if (this.files.hex) {
+				const hex = new CTDHex();
+				this.instance.hex = hex;
+				hex.setParent(this);
+
+				await hex.setFileChunk(this.files.hex);
+			}
+
+			if (this.files.xmlcon) {
+				const xmlcon = new CTDXMLCON();
+				this.instance.xmlcon = xmlcon;
+				xmlcon.setParent(this);
+
+				await xmlcon.setFile(this.files.xmlcon);
+			}
+		}
+
 		async parseURLs() {
 			if (this.urls.hex) {
 				const hex = new CTDHex();
@@ -208,6 +226,24 @@ const ParserCTD = (() => {
 				bl.setParent(this);
 
 				await bl.setFileURL(this.urls.bl);
+			}
+		}
+
+		async parseURLsChunk() {
+			if (this.urls.hex) {
+				const hex = new CTDHex();
+				this.instance.hex = hex;
+				hex.setParent(this);
+
+				await hex.setFileURLChunk(this.urls.hex);
+			}
+
+			if (this.urls.xmlcon) {
+				const xmlcon = new CTDXMLCON();
+				this.instance.xmlcon = xmlcon;
+				xmlcon.setParent(this);
+
+				await xmlcon.setFileURL(this.urls.xmlcon);
 			}
 		}
 
@@ -331,6 +367,7 @@ const ParserCTD = (() => {
 			const lat = str.match(/NMEA Latitude = (.*)$/m);
 			const lng = str.match(/NMEA Longitude = (.*)$/m);
 			const utc = str.match(/NMEA UTC \(Time\) = (.*)$/m);
+			const utcSystem = str.match(/System UTC = (.*)$/m);
 			const scanAvg = str.match(/Number of Scans Averaged by the Deck Unit = (.*)$/m);
 
 			const obj = {
@@ -338,6 +375,7 @@ const ParserCTD = (() => {
 				lat: lat,
 				lng: lng,
 				utc: utc,
+				utcSystem: utcSystem,
 				scanAvg: scanAvg
 			}
 
@@ -378,6 +416,15 @@ const ParserCTD = (() => {
 				utc = new Date(utc.getTime() + (utc.getTimezoneOffset() * 60 * 1000 * -1));
 				obj.nmeaUTC = dateStr;
 				obj.utc = utc;
+			}
+
+			if (obj.utcSystem) {
+				const dateStr = obj.utcSystem[1];
+				let utc = new Date(dateStr);
+				// -- add my time zone
+				utc = new Date(utc.getTime() + (utc.getTimezoneOffset() * 60 * 1000 * -1));
+				obj.systemUTC = dateStr;
+				obj.utc = utc; // use same obj.utc as nmea read
 			}
 
 			// -- if its 1, its 24hz scans. otherwise I dont know
@@ -423,7 +470,7 @@ const ParserCTD = (() => {
 			meta.lat = this.parsedHDR.lat;
 			meta.lng = this.parsedHDR.lng;
 			meta.ts = this.parsedHDR.utc;
-			meta.ms = meta.ts.getTime();
+			meta.ms = meta.ts?.getTime();
 			meta.bytes = this.bytes;
 
 			this.meta = meta;
@@ -548,6 +595,8 @@ const ParserCTD = (() => {
 		// -- If dateMS difference is bigger than 10s, just drop it
 		// -- logged date is invalid at the beginning
 
+		static CHUNK_SIZE = 10 * 1024;
+
 		constructor() {
 			super();
 			this.file = undefined;
@@ -567,10 +616,28 @@ const ParserCTD = (() => {
 			}
 		}
 
+		async setFileChunk(file) {
+			const blobChunk = file.slice(0, CTDHex.CHUNK_SIZE - 1);
+			const text = await blobChunk.text();
+			this.setDataSource(text);
+			this.bytes = file.size;
+		}
+
 		async setFile(file) {
 			const text = await file.text();
 			this.setDataSource(text);
 			this.bytes = file.size;
+		}
+
+		async setFileURLChunk(url) {
+			const r = await fetch(url, {
+				headers: {range: `bytes=0-${CTDHex.CHUNK_SIZE - 1}`}
+			});
+
+			const bytes = r.headers.get('content-length');
+			const text = await r.text();
+			this.setDataSource(text);
+			this.bytes = parseInt(bytes);
 		}
 
 		async setFileURL(url) {
@@ -631,7 +698,8 @@ const ParserCTD = (() => {
 				if (LF === body.charCodeAt(i)) {
 					lineLength = i + 1;
 
-					bodyLength = body.length / lineLength;
+					// -- chunked length is not valid
+					bodyLength = Math.floor(body.length / lineLength);
 					break;
 				}
 			}
@@ -982,7 +1050,7 @@ const ParserCTD = (() => {
 			meta.lat = this.parsedHDR.lat;
 			meta.lng = this.parsedHDR.lng;
 			meta.ts = this.parsedHDR.utc;
-			meta.ms = meta.ts.getTime();
+			meta.ms = meta.ts?.getTime();
 			meta.count = this.getLength();
 			meta.desc = descStr;
 			meta.bytes = this.bytes;

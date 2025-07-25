@@ -31,11 +31,16 @@ const app = (() => {
             fileList.addURL(f);
         }
 
-        fileList.getGroups().forEach(async (d) => {
+        
+        fileList.getGroups().forEach(async (d, i) => {
+            console.time('a' + i);
+            // await d.parseURLsChunk();
             await d.parseURLs();
             const meta = d.parseMeta();
             console.log(meta);
+            console.timeEnd('a' + i);
         });
+        
     }
 
     async function onChangeFile(input) {
@@ -48,14 +53,17 @@ const app = (() => {
         }
 
         fileList.getGroups().forEach(async (d) => {
-            await d.parse();
+            // await d.parse();
+            console.time('a');
+            await d.parseChunk();
             const meta = d.parseMeta();
             console.log(meta);
+            console.timeEnd('a');
         });
     }
 
     function main() {
-        if(!ParserCTD) {
+        if (!ParserCTD) {
             console.error('Can not load ctd meta app');
         } else {
             loadTest();
